@@ -51,7 +51,7 @@ class Workspace(object):
         self.logger = Logger(self.work_dir,
                              save_tb=cfg.log_save_tb,
                              log_frequency=cfg.log_frequency,
-                             agent=cfg.agent.name,
+                             agent='sac',
                              goal_idx=goal_idx)
 
         utils.set_seed_everywhere(cfg.seed)
@@ -61,14 +61,14 @@ class Workspace(object):
         else:
             self.env = env
 
-        cfg.agent.params.obs_dim = self.env.observation_space.shape[0]
-        cfg.agent.params.action_dim = self.env.action_space.shape[0]
-        cfg.agent.params.action_range = [
+        cfg.agent.agent.obs_dim = self.env.observation_space.shape[0]
+        cfg.agent.agent.action_dim = self.env.action_space.shape[0]
+        cfg.agent.agent.action_range = [
             float(self.env.action_space.low.min()),
             float(self.env.action_space.high.max())
         ]
-        print('cfg.agent',cfg.agent)
-        self.agent = hydra.utils.instantiate(cfg.agent)
+        print('cfg.agent.agent',cfg.agent.agent)
+        self.agent = hydra.utils.instantiate(cfg.agent.agent)
 
         self.replay_buffer = ReplayBuffer(self.env.observation_space.shape,
                                           self.env.action_space.shape,
@@ -93,7 +93,7 @@ class Workspace(object):
                 with utils.eval_mode(self.agent):
                     action = self.agent.act(obs, sample=False)
                 new_obs, reward, done, _ = self.env.step(action)
-                trj.append([obs, action, reward, new_obs])
+                trj.append(np.concatenate([obs, action, np.array([reward]), new_obs], axis=-1))
                 obs = new_obs
                 episode_reward += reward
                 self.video_recorder.record(self.env, self.mujoco)
@@ -102,7 +102,7 @@ class Workspace(object):
 
             self.video_recorder.save(f'{self.step}.mp4')
             self.logger.log('eval/episode_reward', episode_reward, self.step)
-            np.save(os.path.join(self.work_dir, f'trj_eval{episode}_step{self.eval_times*self.cfg.eval_frequency}.npy'), np.array(trj))
+            np.save(os.path.join(self.work_dir, f'trj_eval{episode}_step{self.eval_times*self.cfg.eval_frequency}.npy'), np.array(trj, dtype=np.float64))
         self.logger.dump(self.step)
 
     def evaluate_sample(self, eval_start_num=0):
@@ -117,7 +117,7 @@ class Workspace(object):
                 with utils.eval_mode(self.agent):
                     action = self.agent.act(obs, sample=True)
                 new_obs, reward, done, _ = self.env.step(action)
-                trj.append([obs, action, reward, new_obs])
+                trj.append(np.concatenate([obs, action, np.array([reward]), new_obs], axis=-1))
                 obs = new_obs
                 episode_reward += reward
                 self.video_recorder.record(self.env, self.mujoco)
@@ -125,7 +125,7 @@ class Workspace(object):
 
             self.video_recorder.save(f'{self.step}.mp4')
             self.logger.log('eval_sample/episode_reward', episode_reward, self.step)
-            np.save(os.path.join(self.work_dir, f'trj_evalsample{episode+eval_start_num}_step{self.eval_times*self.cfg.eval_frequency}.npy'), np.array(trj))
+            np.save(os.path.join(self.work_dir, f'trj_evalsample{episode+eval_start_num}_step{self.eval_times*self.cfg.eval_frequency}.npy'), np.array(trj, dtype=np.float64))
         self.logger.dump(self.step)
 
     def run(self):
@@ -206,14 +206,3 @@ class Workspace(object):
                 self.agent.load_model(output=self.work_dir, step=self.step)
                 self.evaluate_sample(eval_start_num=self.cfg.eval_start_num)
             self.step += 1
-
-
-
-@hydra.main(config_path='config/train.yaml', strict=True)
-def main(cfg):
-    workspace = Workspace(cfg)
-    workspace.run()
-
-
-if __name__ == '__main__':
-    main()

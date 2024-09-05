@@ -6,7 +6,7 @@ Training behavior policies for CSRO
 import click
 import json
 import os
-from hydra.experimental import compose, initialize
+from hydra import compose, initialize
 
 import argparse
 import multiprocessing as mp
@@ -28,16 +28,14 @@ def deep_update_dict(fr, to):
             to[k] = v
     return to
 
-initialize(config_dir="./rlkit/torch/sac/pytorch_sac/config/")
+initialize(version_base='1.2', config_path="./rlkit/torch/sac/pytorch_sac/config/")
 
-def experiment(variant, cfg, goal_idx=0, seed=0,  eval=False):
+def experiment(gpu_id, variant, cfg, goal_idx=0, seed=0,  eval=False):
     env = NormalizedBoxEnv(ENVS[variant['env_name']](**variant['env_params']))
     if seed is not None:
         env.seed(seed) 
     env.reset_task(goal_idx)
-    # if "cuda" in cfg.device:
-    #     os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu_id)
-    # NOTE: for new environment variable to be effective, torch should be imported after assignment
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     from rlkit.torch.sac.pytorch_sac.train import Workspace
     workspace = Workspace(cfg=cfg, env=env, env_name=variant['env_name'], goal_idx=goal_idx)
     if eval:
@@ -53,9 +51,7 @@ def experiment(variant, cfg, goal_idx=0, seed=0,  eval=False):
 @click.option("--docker", is_flag=True, default=False)
 @click.option("--debug", is_flag=True, default=False)
 @click.option("--eval", is_flag=True, default=False)
-@click.option("--split", default=1)
-@click.option("--split_idx", default=0)
-def main(config, gpu, docker, debug, eval, goal_idx=0, seed=0, split=1, split_idx=0):
+def main(config, gpu, docker, debug, eval, goal_idx=0, seed=0):
     variant = default_config
     cwd = os.getcwd()
     files = os.listdir(cwd)
@@ -63,25 +59,23 @@ def main(config, gpu, docker, debug, eval, goal_idx=0, seed=0, split=1, split_id
         with open(os.path.join(config)) as f:
             exp_params = json.load(f)
         variant = deep_update_dict(exp_params, variant)
-    variant['util_params']['gpu_id'] = gpu
 
     if variant["env_name"] == "point-robot":
-        cfg = compose("train_point.yaml")
+        cfg = compose(config_name="train_point")
     else:
-        cfg = compose("train.yaml")
-    cfg.gpu_id = gpu
+        cfg = compose(config_name="train")
 
     print('cfg.agent', cfg.agent)
-    split_len = variant['env_params']['n_tasks'] // split
-    if variant['env_params']['n_tasks'] % split != 0:
-        raise ValueError
-    else:
-        task_idx_list = range(split_len*split_idx, split_len*(split_idx+1))
-    print(list(task_idx_list))
+    args_list = []
+    gpu_count = 2
+    for task_id in range(variant['env_params']['n_tasks']):
+        gpu_id = task_id % gpu_count
+        args_list.append([gpu_id, variant, cfg, task_id])
     # multi-processing
-    p = mp.Pool(mp.cpu_count())
-    if len(list(task_idx_list)) > 1:
-        p.starmap(experiment, product([variant], [cfg], list(task_idx_list)))
+    p = mp.Pool(10)
+    if len(list(args_list)) > 1:
+        # p.starmap(experiment, product([variant], [cfg], list(task_idx_list)))
+        p.starmap(experiment, args_list)
     else:
         experiment(variant=variant, cfg=cfg, goal_idx=goal_idx)
 

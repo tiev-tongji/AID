@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from copy import deepcopy
 
 
 from ..agent import Agent
@@ -14,7 +15,7 @@ import hydra
 class SACAgent(Agent):
     """SAC algorithm."""
     def __init__(self, obs_dim, action_dim, action_range, device,
-                 critic_cfg, actor_cfg, discount, init_temperature, alpha_lr,
+                 critic, actor, discount, init_temperature, alpha_lr,
                  alpha_betas, actor_lr, actor_betas, actor_update_frequency,
                  critic_lr, critic_betas, critic_tau,
                  critic_target_update_frequency, batch_size):
@@ -28,12 +29,11 @@ class SACAgent(Agent):
         self.critic_target_update_frequency = critic_target_update_frequency
         self.batch_size = batch_size
 
-        self.critic = hydra.utils.instantiate(critic_cfg).to(self.device)
-        self.critic_target = hydra.utils.instantiate(critic_cfg).to(
-            self.device)
+        self.critic = critic.to(self.device)
+        self.critic_target = deepcopy(self.critic).to(self.device)
         self.critic_target.load_state_dict(self.critic.state_dict())
 
-        self.actor = hydra.utils.instantiate(actor_cfg).to(self.device)
+        self.actor = actor.to(self.device)
 
         self.log_alpha = torch.tensor(np.log(init_temperature)).to(self.device)
         self.log_alpha.requires_grad = True

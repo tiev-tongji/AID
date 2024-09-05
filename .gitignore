@@ -133,3 +133,6 @@ data/
 *.err
 *.out
 *.slurm
+
+offline_dataset
+.vscode

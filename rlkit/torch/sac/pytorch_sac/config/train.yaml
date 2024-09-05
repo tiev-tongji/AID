@@ -1,5 +1,6 @@
 defaults:
     - agent: sac
+    - _self_
 
 # this needs to be specified manually
 experiment: test_exp
@@ -38,6 +39,5 @@ seed: 0
 
 # hydra configuration
 hydra:
-    name: ${env}
     run:
         dir: ./exp/${now:%Y.%m.%d}/${now:%H%M}_${agent.name}_${experiment}
