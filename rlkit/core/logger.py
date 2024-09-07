@@ -227,6 +227,7 @@ table_printer = TerminalTablePrinter()
 
 def dump_tabular(*args, **kwargs):
     wh = kwargs.pop("write_header", None)
+    tb_writer = kwargs.pop("tb_writer", None)
     if len(_tabular) > 0:
         if _log_tabular_only:
             table_printer.print_tabular(_tabular)
@@ -234,6 +235,18 @@ def dump_tabular(*args, **kwargs):
             for line in tabulate(_tabular).split('\n'):
                 log(line, *args, **kwargs)
         tabular_dict = dict(_tabular)
+        _epoch = int(tabular_dict['Epoch'])
+        for k in tabular_dict.keys():
+            if 'Z mean' in k or 'Z variance' in k or 'Epoch' in k or 'Time' in k or 'total' in k:
+                continue
+            if 'Return' in k:
+                tb_writer.add_scalar('Return/'+k, float(tabular_dict[k]), _epoch)
+            elif 'Loss' in k:
+                tb_writer.add_scalar('Loss/'+k, float(tabular_dict[k]), _epoch)
+            elif 'Policy' in k or 'Pis' in k:
+                tb_writer.add_scalar('Policy/'+k, float(tabular_dict[k]), _epoch)
+            else:
+                tb_writer.add_scalar('Other/'+k, float(tabular_dict[k]), _epoch)
         # Also write to the csv files
         # This assumes that the keys in each iteration won't change!
         for tabular_fd in list(_tabular_fds.values()):

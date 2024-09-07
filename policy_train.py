@@ -28,7 +28,7 @@ def deep_update_dict(fr, to):
             to[k] = v
     return to
 
-initialize(version_base='1.2', config_path="./rlkit/torch/sac/pytorch_sac/config/")
+initialize(version_base='1.3', config_path="./rlkit/torch/sac/pytorch_sac/config/")
 
 def experiment(gpu_id, variant, cfg, goal_idx=0, seed=0,  eval=False):
     env = NormalizedBoxEnv(ENVS[variant['env_name']](**variant['env_params']))
@@ -77,7 +77,7 @@ def main(config, gpu, docker, debug, eval, goal_idx=0, seed=0):
         # p.starmap(experiment, product([variant], [cfg], list(task_idx_list)))
         p.starmap(experiment, args_list)
     else:
-        experiment(variant=variant, cfg=cfg, goal_idx=goal_idx)
+        experiment(gpu, variant=variant, cfg=cfg, goal_idx=goal_idx)
 
 
 if __name__ == '__main__':

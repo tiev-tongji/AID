@@ -2,7 +2,7 @@
     "env_name": "ant-goal",
     "n_train_tasks": 30,
     "n_eval_tasks": 10,
-    "interpolation": false,
+    "interpolation": true,
     "randomize_tasks": 0,
     "latent_size": 20,
     "env_params": {

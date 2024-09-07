@@ -14,6 +14,7 @@ default_config = dict(
         max_episode_steps=200, # built-in max episode length for this environment
     ),
     algo_params=dict(
+        offline_data_quality = 'expert', # quality of the offline data for training, one of [mix, low, mid, expert]
         meta_batch=16, # number of tasks to average the gradient across
         batch_size=256, # number of transitions in the RL batch
         num_iterations=500, # number of data sampling / training iterates
@@ -69,7 +70,7 @@ default_config = dict(
         club_use_sa=False
     ),
     util_params=dict(
-        base_log_dir='./output',
+        base_log_dir='./logs',
         use_gpu=True,
         gpu_id=0,
         debug=True, # debugging triggers printing and writes logs to debug directory

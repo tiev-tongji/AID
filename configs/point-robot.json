@@ -1,17 +1,17 @@
 {
     "env_name": "point-robot",
-    "n_train_tasks": 30,
+    "n_train_tasks": 10,
     "n_eval_tasks": 10,
-    "interpolation": false,
+    "interpolation": true,
     "randomize_tasks": 0,
     "latent_size": 20,
     "env_params": {
-        "n_tasks": 40,
+        "n_tasks": 20,
         "randomize_tasks": 0,
         "max_episode_steps": 20
     },
     "algo_params": {
-        "meta_batch":16,
+        "meta_batch":10,
         "num_iterations": 65,
         "replay_buffer_size": 200000,
         "num_tasks_sample": 10,
@@ -26,8 +26,8 @@
         "num_exp_traj_eval": 1,
         "dump_eval_paths": 0,
 
-        "train_epoch": [2200, 5000, 200],
-        "eval_epoch": [2200, 5000, 200],
+        "train_epoch": [200, 5000, 200],
+        "eval_epoch": [200, 5000, 200],
         "sample": 1,
         "n_trj": 50,
         "data_dir": "./offline_dataset/point-robot",
@@ -37,7 +37,7 @@
 
         "allow_backward_z": false,
         "use_FOCAL_cl": true,
-        "use_club": true,
+        "use_club": false,
         "club_model_loss_weight": 10,
         "club_loss_weight": 25
     },

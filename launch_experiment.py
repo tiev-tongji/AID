@@ -22,6 +22,7 @@ from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
 from configs.default import default_config
 import pdb
+from tensorboardX import SummaryWriter
 
 
 def global_seed(seed=0):
@@ -30,7 +31,8 @@ def global_seed(seed=0):
     np.random.seed(seed)
     random.seed(seed)
 
-def experiment(variant, seed=None):
+def experiment(gpu_id, variant, seed=None):
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     # create multi-task environment and sample tasks, normalize obs if provided with 'normalizer.npz'
     if 'normalizer.npz' in os.listdir(variant['algo_params']['data_dir']):
@@ -204,8 +206,9 @@ def experiment(variant, seed=None):
         pickle_dir = experiment_log_dir + '/eval_trajectories'
         pathlib.Path(pickle_dir).mkdir(parents=True, exist_ok=True)
 
+    tb_writer = SummaryWriter(log_dir=experiment_log_dir)
     # run the algorithm
-    algorithm.train()
+    algorithm.train(tb_writer)
 
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
@@ -234,7 +237,7 @@ def main(config, gpu, seed=0, exp_name=None):
         variant['util_params']['exp_name'] = exp_name
 
     # multi-processing
-    experiment(variant, seed)
+    experiment(gpu, variant, seed)
 
 if __name__ == "__main__":
     main()

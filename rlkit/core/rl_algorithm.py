@@ -12,6 +12,10 @@ from rlkit.data_management.path_builder import PathBuilder
 from rlkit.samplers.in_place import InPlacePathSampler, OfflineInPlacePathSampler
 from rlkit.torch import pytorch_util as ptu
 import pdb
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import torch
+from pathlib import Path
 
 class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
     def __init__(
@@ -37,12 +41,15 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         see default experiment config file for descriptions of the rest of the arguments
         """
         self.env                             = env
+        self.obs_dim = int(np.prod(env.observation_space.shape))
+        self.action_dim = int(np.prod(env.action_space.shape))
         self.agent                           = agent
         self.train_tasks                     = train_tasks
         self.eval_tasks                      = eval_tasks
         self.n_tasks                         = len(train_tasks) + len(eval_tasks)
         self.goal_radius                     = goal_radius
 
+        self.offline_data_quality            = kwargs['offline_data_quality']
         self.meta_batch                      = kwargs['meta_batch']
         self.batch_size                      = kwargs['batch_size']
         self.num_iterations                  = kwargs['num_iterations']
@@ -101,24 +108,22 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         train_trj_paths = []
         eval_trj_paths = []
         # trj entry format: [obs, action, reward, new_obs]
-        if self.sample:
-            for i in range(self.n_tasks):
-                for j in range(self.train_epoch[0], self.train_epoch[1], self.train_epoch[2]):
-                    for k in range(self.n_trj):
-                        train_trj_paths += [os.path.join(self.data_dir, f"goal_idx{i}", f"trj_evalsample{k}_step{j}.npy")]
-            for i in range(self.n_tasks):
-                for j in range(self.eval_epoch[0], self.eval_epoch[1], self.eval_epoch[2]):
-                    for k in range(self.n_trj):
-                        eval_trj_paths += [os.path.join(self.data_dir, f"goal_idx{i}", f"trj_evalsample{k}_step{j}.npy")]
-        else:
-            for i in range(self.n_tasks):
-                for j in range(self.train_epoch[0], self.train_epoch[1], self.train_epoch[2]):
-                    for k in range(self.n_trj):
-                        train_trj_paths += [os.path.join(self.data_dir, f"goal_idx{i}", f"trj_eval{k}_step{j}.npy")]
-            for i in range(self.n_tasks):
-                for j in range(self.eval_epoch[0], self.eval_epoch[1], self.eval_epoch[2]):
-                    for k in range(self.n_trj):
-                        eval_trj_paths += [os.path.join(self.data_dir, f"goal_idx{i}", f"trj_eval{k}_step{j}.npy")]
+        for i in range(self.n_tasks):
+            goal_i_dir = Path(self.data_dir) / f"goal_idx{i}"
+            quality_steps = np.array(sorted(list(set([int(trj_path.stem.split('step')[-1]) for trj_path in goal_i_dir.rglob('trj_evalsample*_step*.npy')]))))
+            low_quality_steps, mid_quality_steps, high_quality_steps = np.array_split(quality_steps, 3)
+            if self.offline_data_quality == 'low':
+                training_date_steps = low_quality_steps
+            elif self.offline_data_quality == 'mid':
+                training_date_steps = mid_quality_steps
+            elif self.offline_data_quality == 'expert':
+                training_date_steps = high_quality_steps[-1:]
+            else:
+                training_date_steps = quality_steps
+            for j in training_date_steps:
+                for k in range(self.n_trj):
+                    train_trj_paths += [os.path.join(self.data_dir, f"goal_idx{i}", f"trj_evalsample{k}_step{j}.npy")]
+                    eval_trj_paths += [os.path.join(self.data_dir, f"goal_idx{i}", f"trj_evalsample{k}_step{j}.npy")]
         
         train_paths = [train_trj_path for train_trj_path in train_trj_paths if
                        int(train_trj_path.split('/')[-2].split('goal_idx')[-1]) in self.train_tasks]
@@ -144,10 +149,11 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
         for train_path, train_task_idx in zip(train_paths, train_task_idxs):
             trj_npy = np.load(train_path, allow_pickle=True)
-            obs_train_lst += list(trj_npy[:, 0])
-            action_train_lst += list(trj_npy[:, 1])
-            reward_train_lst += list(trj_npy[:, 2])
-            next_obs_train_lst += list(trj_npy[:, 3])
+            obs, action, reward, next_obs = np.array_split(trj_npy, [self.obs_dim, self.obs_dim+self.action_dim, -self.obs_dim], axis=-1)
+            obs_train_lst += list(obs)
+            action_train_lst += list(action)
+            reward_train_lst += list(reward)
+            next_obs_train_lst += list(next_obs)
             terminal = [0 for _ in range(trj_npy.shape[0])]
             terminal[-1] = 1
             terminal_train_lst += terminal
@@ -155,10 +161,11 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             task_train_lst += task_train
         for eval_path, eval_task_idx in zip(eval_paths, eval_task_idxs):
             trj_npy = np.load(eval_path, allow_pickle=True)
-            obs_eval_lst += list(trj_npy[:, 0])
-            action_eval_lst += list(trj_npy[:, 1])
-            reward_eval_lst += list(trj_npy[:, 2])
-            next_obs_eval_lst += list(trj_npy[:, 3])
+            obs, action, reward, next_obs = np.array_split(trj_npy, [self.obs_dim, self.obs_dim+self.action_dim, -self.obs_dim], axis=-1)
+            obs_eval_lst += list(obs)
+            action_eval_lst += list(action)
+            reward_eval_lst += list(reward)
+            next_obs_eval_lst += list(next_obs)
             terminal = [0 for _ in range(trj_npy.shape[0])]
             terminal[-1] = 1
             terminal_eval_lst += terminal
@@ -243,7 +250,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             logger.record_tabular('Total Train Time (s)', total_time)
 
             logger.record_tabular("Epoch", epoch)
-            logger.dump_tabular(with_prefix=False, with_timestamp=False)
+            logger.dump_tabular(with_prefix=False, with_timestamp=False, tb_writer = self.tb_writer)
         else:
             logger.log("Skipping eval for now.")
 
@@ -368,10 +375,11 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
         return online_final_returns, online_all_return, offline_final_returns, offline_all_return, np_online_final_returns, np_online_all_return
 
-    def train(self):
+    def train(self, tb_writer):
         '''
         meta-training loop
         '''
+        self.tb_writer = tb_writer
         params = self.get_epoch_snapshot(-1)
         logger.save_itr_params(-1, params)
         gt.reset()
@@ -427,6 +435,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         ### test tasks
         eval_util.dprint('evaluating on {} test tasks'.format(len(self.eval_tasks)))
         test_online_final_returns, test_online_all_returns, test_offline_final_returns, test_offline_all_returns, test_np_online_final_returns, test_np_online_all_returns = self._do_eval(self.eval_tasks, epoch, buffer=self.eval_buffer)
+        train_online_final_returns, train_online_all_returns, train_offline_final_returns, train_offline_all_returns, train_np_online_final_returns, train_np_online_all_returns = self._do_eval(self.train_tasks, epoch, buffer=self.replay_buffer)
         eval_util.dprint('test online all returns')
         eval_util.dprint(test_online_all_returns)
         eval_util.dprint('test offline all returns')
@@ -440,23 +449,38 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         avg_test_online_final_return = np.mean(test_online_final_returns)
         avg_test_offline_final_return = np.mean(test_offline_final_returns)
         avg_test_np_online_final_return = np.mean(test_np_online_final_returns)
+        avg_train_online_final_return = np.mean(train_online_final_returns)
+        avg_train_offline_final_return = np.mean(train_offline_final_returns)
+        avg_train_np_online_final_return = np.mean(train_np_online_final_returns)
 
         
         avg_test_online_all_return = np.mean(np.stack(test_online_all_returns), axis=0)
         avg_test_offline_all_return = np.mean(np.stack(test_offline_all_returns), axis=0)
         avg_test_np_online_all_return = np.mean(np.stack(test_np_online_all_returns), axis=0)
+        avg_train_online_all_return = np.mean(np.stack(train_online_all_returns), axis=0)
+        avg_train_offline_all_return = np.mean(np.stack(train_offline_all_returns), axis=0)
+        avg_train_np_online_all_return = np.mean(np.stack(train_np_online_all_returns), axis=0)
             
         self.eval_statistics['Average_OnlineReturn_all_test_tasks'] = avg_test_online_final_return
         self.eval_statistics['Average_OfflineReturn_all_test_tasks'] = avg_test_offline_final_return
         self.eval_statistics['Average_NpOnlineReturn_all_test_tasks'] = avg_test_np_online_final_return
+        self.eval_statistics['Average_OnlineReturn_all_train_tasks'] = avg_train_online_final_return
+        self.eval_statistics['Average_OfflineReturn_all_train_tasks'] = avg_train_offline_final_return
+        self.eval_statistics['Average_NpOnlineReturn_all_train_tasks'] = avg_train_np_online_final_return
 
         self.loss['avg_test_online_final_return'] = avg_test_online_final_return
         self.loss['avg_test_offline_final_return'] = avg_test_offline_final_return
         self.loss['avg_test_np_online_final_return'] = avg_test_np_online_final_return
+        self.loss['avg_train_online_final_return'] = avg_train_online_final_return
+        self.loss['avg_train_offline_final_return'] = avg_train_offline_final_return
+        self.loss['avg_train_np_online_final_return'] = avg_train_np_online_final_return
 
         self.loss['avg_test_online_all_return'] = np.mean(avg_test_online_all_return)
         self.loss['avg_test_offline_all_return'] = np.mean(avg_test_offline_all_return)
         self.loss['avg_test_np_online_all_return'] = np.mean(avg_test_np_online_all_return)
+        self.loss['avg_train_online_all_return'] = np.mean(avg_train_online_all_return)
+        self.loss['avg_train_offline_all_return'] = np.mean(avg_train_offline_all_return)
+        self.loss['avg_train_np_online_all_return'] = np.mean(avg_train_np_online_all_return)
 
         for key, value in self.eval_statistics.items():
             logger.record_tabular(key, value)
@@ -464,6 +488,35 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
         if self.plotter:
             self.plotter.draw()
+        # Plot T-SNE at the end of training
+        if epoch == (self.num_iterations - 1):
+            print('---------T-SNE: Collecting Zs----------')
+            # sample offline context zs
+            fig_save_dir = logger._snapshot_dir + '/figures'
+            n_points = 100
+            offline_train_zs, offline_test_zs, online_train_zs, online_test_zs, online_train_np_zs, online_test_np_zs = [], [], [], [], [], []
+            for i in range(n_points):
+                print(f'Clollect {i} traj...')
+                offline_train_zs.append(self.collect_offline_zs(self.train_tasks, self.replay_buffer))
+                offline_test_zs.append(self.collect_offline_zs(self.eval_tasks, self.eval_buffer))
+                online_train_zs.append(self.collect_online_zs(self.train_tasks))
+                online_test_zs.append(self.collect_online_zs(self.eval_tasks))
+                online_train_np_zs.append(self.collect_online_zs(self.train_tasks, np_online=True))
+                online_test_np_zs.append(self.collect_online_zs(self.eval_tasks, np_online=True))
+            offline_train_zs = np.stack(offline_train_zs, axis=1)
+            offline_test_zs = np.stack(offline_test_zs, axis=1)
+            online_train_zs = np.stack(online_train_zs, axis=1)
+            online_test_zs = np.stack(online_test_zs, axis=1)
+            online_train_np_zs = np.stack(online_train_np_zs, axis=1)
+            online_test_np_zs = np.stack(online_test_np_zs, axis=1)
+            
+            print('---------T-SNE: Plotting------------')
+            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_train_zs_{epoch}.png', zs=[offline_train_zs], subplot_title_lst=[f'offline_train_zs_{epoch}'])
+            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_test_zs_{epoch}.png', zs=[offline_test_zs], subplot_title_lst=[f'offline_test_zs_{epoch}'])
+            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_zs_{epoch}.png', zs=[online_train_zs], subplot_title_lst=[f'online_train_zs_{epoch}'])
+            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_zs_{epoch}.png', zs=[online_test_zs], subplot_title_lst=[f'online_test_zs_{epoch}'])
+            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_np_zs_{epoch}.png', zs=[online_train_np_zs], subplot_title_lst=[f'online_train_np_zs_{epoch}'])
+            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_np_zs_{epoch}.png', zs=[online_test_np_zs], subplot_title_lst=[f'online_test_np_zs_{epoch}'])
 
     def collect_offline_paths(self, idx, epoch, run, buffer):
         self.task_idx = idx
@@ -597,4 +650,64 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         """
         pass
 
+    def collect_offline_zs(self, indices, buffer):
+        batches = [ptu.np_to_pytorch_batch(buffer.random_batch(idx, batch_size=self.embedding_batch_size, sequence=False)) for idx in indices]
+        context = [self.unpack_batch(batch, sparse_reward=self.sparse_rewards) for batch in batches]
+        # group like elements together
+        context = [[x[i] for x in context] for i in range(len(context[0]))]
+        context = [torch.cat(x, dim=0) for x in context] # 5 * self.meta_batch * self.embedding_batch_size * dim(o, a, r, no, t)
+        # full context consists of [obs, act, rewards, next_obs, terms]
+        # if dynamics don't change across tasks, don't include next_obs
+        # don't include terminals in context
+        if self.use_next_obs_in_context:
+            context = torch.cat(context[:-1], dim=2)
+        else:
+            context = torch.cat(context[:-2], dim=2)
+        self.agent.clear_z()
+        self.agent.infer_posterior(context, indices)
+        self.agent.detach_z()
+        return ptu.get_numpy(self.agent.z)
 
+    def collect_online_zs(self, indices, np_online=False):
+        zs = []
+        for idx in indices:
+            if np_online:
+                paths = self.collect_np_online_paths(idx, 0, 0, None)
+            else:
+                paths = self.collect_online_paths(idx, 0, 0, None)
+            zs.append(paths[-1]['context'])
+        return np.concatenate(zs, axis=0)
+
+    def vis_task_embeddings(self, save_dir, fig_name, zs, rows=1, cols=1, n_figs=1,
+                subplot_title_lst = ["train_itr_0"],  goals_name_lst=None, figsize=[12, 6], fontsize=15):
+        if figsize is None:
+            fig = plt.figure(figsize=(8, 10))
+        else:
+            fig = plt.figure(figsize=figsize)
+        fig.subplots_adjust(hspace=0.5, wspace=0.3)
+        if goals_name_lst is None:
+            goals_name_lst = [None]*n_figs
+            legend = False
+        else:
+            legend = True
+
+        for z, n_fig, subplot_title, goals_name in zip(zs, range(1, n_figs+1), subplot_title_lst, goals_name_lst):
+            n_tasks, n_points, _ = z.shape
+            proj = TSNE(n_components=2).fit_transform(X=z.reshape(n_tasks*n_points, -1))
+            ax = fig.add_subplot(rows, cols, n_fig)
+            for task_idx in range(n_tasks):
+                idxs = np.arange(task_idx*n_points, (task_idx+1)*n_points)
+                if goals_name is None:
+                    ax.scatter(proj[idxs, 0], proj[idxs, 1], s=2, alpha=0.3, cmap=plt.cm.Spectral)
+                else:
+                    ax.scatter(proj[idxs, 0], proj[idxs, 1], s=2, alpha=0.3, cmap=plt.cm.Spectral, label=goals_name[task_idx])
+
+            ax.set_title(subplot_title, fontsize=fontsize)
+            ax.set_xlabel('t-SNE dimension 1', fontsize=fontsize)
+            ax.set_ylabel('t-SNE dimension 2', fontsize=fontsize)
+            if legend:
+                ax.legend(loc='best')
+        
+        os.makedirs(save_dir, exist_ok=True)
+        plt.savefig(os.path.join(save_dir, fig_name), dpi=400)
+        plt.close()
