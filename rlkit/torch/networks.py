@@ -163,6 +163,14 @@ class MlpEncoder(Mlp):
     def reset(self, num_tasks=1):
         pass
 
+class MlpDecoder(Mlp):
+    '''
+    decode latent z and (s,a) via MLP
+    '''
+
+    def reset(self, num_tasks=1):
+        pass
+
 
 class RecurrentEncoder(FlattenMlp):
     '''

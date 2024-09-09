@@ -37,7 +37,7 @@
 
         "allow_backward_z": false,
         "use_FOCAL_cl": true,
-        "use_club": false,
+        "use_club": true,
         "club_model_loss_weight": 10,
         "club_loss_weight": 25
     },
