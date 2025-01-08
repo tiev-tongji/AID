@@ -92,3 +92,6 @@ class SimpleReplayBuffer(ReplayBuffer):
 
     def num_steps_can_sample(self):
         return self._size
+
+    def get_all_data(self):
+        return self.sample_data(range(self._size))

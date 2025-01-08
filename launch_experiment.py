@@ -3,10 +3,11 @@ Launcher for experiments with CSRO
 
 """
 import os
-import pathlib
+from pathlib import Path
 import numpy as np
 import click
 import json
+import ast
 import torch
 import random
 import multiprocessing as mp
@@ -15,8 +16,12 @@ from itertools import product
 from rlkit.envs import ENVS
 from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
-from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder
+from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
+from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
 from rlkit.torch.sac.sac import CSROSoftActorCritic
+from rlkit.torch.sac.croo import CROOSoftActorCritic
+from rlkit.torch.sac.unicorn import UNICORNSoftActorCritic
+from rlkit.torch.sac.classifier import CLASSIFIERSoftActorCritic 
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
@@ -32,6 +37,7 @@ def global_seed(seed=0):
     random.seed(seed)
 
 def experiment(gpu_id, variant, seed=None):
+    os.sched_setaffinity(0, [gpu_id*8+i for i in range(8)])
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     # create multi-task environment and sample tasks, normalize obs if provided with 'normalizer.npz'
@@ -70,12 +76,42 @@ def experiment(gpu_id, variant, seed=None):
         output_activation=torch.tanh,
         # output_activation_half=True
     )
+    
     context_encoder = encoder_model(
         hidden_sizes=[200, 200, 200],
         input_size=context_encoder_input_dim,
         output_size=context_encoder_output_dim,
         output_activation=torch.tanh,
         layer_norm=variant['algo_params']['layer_norm'] if 'layer_norm' in variant['algo_params'].keys() else False
+    )
+
+    # behavior_encoder = encoder_model(
+    #     hidden_sizes=[200, 200, 200],
+    #     input_size=obs_dim + action_dim,
+    #     output_size=2*latent_dim,
+    #     output_activation=torch.tanh,
+    #     # output_activation_half=True,
+    #     layer_norm=variant['algo_params']['layer_norm'] if 'layer_norm' in variant['algo_params'].keys() else False
+    # )
+
+    context_decoder = MlpDecoder(
+        hidden_sizes=[200, 200, 200],
+        input_size=latent_dim+obs_dim+action_dim,
+        output_size=2*(reward_dim+obs_dim) if variant['algo_params']['use_next_obs_in_context'] else 2*reward_dim,
+        layer_norm=variant['algo_params']['layer_norm'] if 'layer_norm' in variant['algo_params'].keys() else False
+    )
+    
+    classifier = MlpDecoder(
+        hidden_sizes=[net_size],
+        input_size=context_encoder_output_dim,
+        output_size=variant['n_train_tasks'],
+        layer_norm=variant['algo_params']['layer_norm'] if 'layer_norm' in variant['algo_params'].keys() else False
+    )
+
+    uncertainty_mlp = MlpDecoder(
+        hidden_sizes=[net_size],
+        input_size=latent_dim,
+        output_size=1,
     )
 
     qf1 = FlattenMlp(
@@ -94,6 +130,12 @@ def experiment(gpu_id, variant, seed=None):
         output_size=1,
     )
 
+    c = FlattenMlp(
+        hidden_sizes=[net_size, net_size, net_size],
+        input_size=obs_dim + action_dim + latent_dim,
+        output_size=1
+    )
+
     policy = TanhGaussianPolicy(
         hidden_sizes=[net_size, net_size, net_size],
         obs_dim=obs_dim + latent_dim,
@@ -104,66 +146,49 @@ def experiment(gpu_id, variant, seed=None):
     agent = PEARLAgent(
         latent_dim,
         context_encoder,
+        uncertainty_mlp,
         policy,
         **variant['algo_params']
     )
-    if variant['algo_type'] == 'CSRO':
-        # critic network for divergence in dual form (see BRAC paper https://arxiv.org/abs/1911.11361)
-        c = FlattenMlp(
-            hidden_sizes=[net_size, net_size, net_size],
-            input_size=obs_dim + action_dim + latent_dim,
-            output_size=1
-        )
-        if 'interpolation' in variant.keys() and variant['interpolation']:
-            if 'randomize_tasks' in variant.keys() and variant['randomize_tasks']:
-                train_tasks = np.random.choice(len(tasks), size=variant['n_train_tasks'], replace=False)
-                eval_tasks = np.array(list(set(range(len(tasks))).difference(train_tasks)))
-            else:
-                gap = int(variant['n_train_tasks']/variant['n_eval_tasks']) + 1
-                eval_tasks = np.arange(0, variant['n_train_tasks']+variant['n_eval_tasks'], gap) + int(gap/2)
-                train_tasks = np.array(list(set(range(len(tasks))).difference(eval_tasks)))
-            
-            if 'goal_radius' in variant['env_params']:
-                algorithm = CSROSoftActorCritic(
-                    env=env,
-                    train_tasks=train_tasks,
-                    eval_tasks=eval_tasks,
-                    nets=[agent, qf1, qf2, vf, c, club_model],
-                    latent_dim=latent_dim,
-                    goal_radius=variant['env_params']['goal_radius'],
-                    **variant['algo_params']
-                )
-            else:
-                algorithm = CSROSoftActorCritic(
-                    env=env,
-                    train_tasks=train_tasks,
-                    eval_tasks=eval_tasks,
-                    nets=[agent, qf1, qf2, vf, c, club_model],
-                    latent_dim=latent_dim,
-                    **variant['algo_params']
-                )
-        else:
-            if 'goal_radius' in variant['env_params']:
-                algorithm = CSROSoftActorCritic(
-                    env=env,
-                    train_tasks=list(tasks[:variant['n_train_tasks']]),
-                    eval_tasks=list(tasks[-variant['n_eval_tasks']:]),
-                    nets=[agent, qf1, qf2, vf, c, club_model],
-                    latent_dim=latent_dim,
-                    goal_radius=variant['env_params']['goal_radius'],
-                    **variant['algo_params']
-                )
-            else:
-                algorithm = CSROSoftActorCritic(
-                    env=env,
-                    train_tasks=list(tasks[:variant['n_train_tasks']]),
-                    eval_tasks=list(tasks[-variant['n_eval_tasks']:]),
-                    nets=[agent, qf1, qf2, vf, c, club_model],
-                    latent_dim=latent_dim,
-                    **variant['algo_params']
-                )
-    else:
-        NotImplemented
+
+    # Setting up tasks
+    if 'randomize_tasks' in variant.keys() and variant['randomize_tasks']:
+        train_tasks = np.random.choice(len(tasks), size=variant['n_train_tasks'], replace=False)
+    elif 'interpolation' in variant.keys() and variant['interpolation']:
+        step = len(tasks)/variant['n_train_tasks']
+        train_tasks = np.array([tasks[int(i*step)] for i in range(variant['n_train_tasks'])])
+    eval_tasks = np.array(list(set(range(len(tasks))).difference(train_tasks)))
+    goal_radius = variant['env_params']['goal_radius'] if 'goal_radius' in variant['env_params'] else 1
+    
+    # Choose algorithm
+    algo_type = variant['algo_type']
+    algorithm = CSROSoftActorCritic(
+        env=env,
+        train_tasks=train_tasks,
+        eval_tasks=eval_tasks,
+        nets=[agent, qf1, qf2, vf, c, club_model, context_decoder, classifier],
+        latent_dim=latent_dim,
+        goal_radius=goal_radius,
+        seed=seed,
+        algo_type=algo_type,
+        **variant['algo_params'],
+    )
+    # focal nets=[agent, qf1, qf2, vf, c]
+    # focal_loss
+
+    # CSRO nets=[agent, qf1, qf2, vf, c, club_model]
+    # focal_loss + W * club_loss
+    
+    # CORRO nets=[agent, qf1, qf2, vf, c]
+    # infoNCE_loss
+
+    # UNICORN nets=[agent, qf1, qf2, vf, c, context_decoder]
+    # focal_loss + W * recon_loss
+
+    # CLASSIFIER nets=[agent, qf1, qf2, vf, c, classifier]
+    # classifier_loss
+
+    # CROO nets=[agent, qf1, qf2, vf, c, behavior_encoder, context_decoder]
 
     # optionally load pre-trained weights
     if variant['path_to_weights'] is not None:
@@ -178,6 +203,8 @@ def experiment(gpu_id, variant, seed=None):
         algorithm.networks[-3].load_state_dict(agent_ckpt['target_vf'])
         policy.load_state_dict(agent_ckpt['policy'])
         c.load_state_dict(agent_ckpt['c'])
+        context_decoder.load_state_dict(agent_ckpt['context_decoder'])
+        # behavior_encoder.load_state_dict(agent_ckpt['behavior_encoder'])
 
     # optional GPU mode
     ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
@@ -204,7 +231,7 @@ def experiment(gpu_id, variant, seed=None):
     # optionally save eval trajectories as pkl files
     if variant['algo_params']['dump_eval_paths']:
         pickle_dir = experiment_log_dir + '/eval_trajectories'
-        pathlib.Path(pickle_dir).mkdir(parents=True, exist_ok=True)
+        Path(pickle_dir).mkdir(parents=True, exist_ok=True)
 
     tb_writer = SummaryWriter(log_dir=experiment_log_dir)
     # run the algorithm
@@ -222,22 +249,42 @@ def deep_update_dict(fr, to):
 
 @click.command()
 @click.argument('config', default=None)
-@click.option('--gpu', default=0)
-@click.option('--seed', default=0)
+@click.option('--gpu', default="0,1,2,3", type=str, help="Comma-separated list of gpu.")
+@click.option('--seed', default="0", type=str, help="Comma-separated list of seeds.")
 @click.option('--exp_name', default=None)
-def main(config, gpu, seed=0, exp_name=None):
+@click.option('--pretrain', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
+@click.option('--algo_type', type=click.Choice(['FOCAL', 'CSRO', 'CORRO', 'UNICORN', 'CLASSIFIER', 'CROO'], case_sensitive=False), default=None)
+def main(config, gpu, seed, exp_name=None, pretrain=None, algo_type=None):
 
     variant = default_config
     if config:
         with open(os.path.join(config)) as f:
             exp_params = json.load(f)
         variant = deep_update_dict(exp_params, variant)
+
+    gpu = [int(g) for g in gpu.split(",")]
+    print(f"Parsed gpus: {gpu}")
     variant['util_params']['gpu_id'] = gpu
+    
     if not (exp_name == None):
         variant['util_params']['exp_name'] = exp_name
+    if not (pretrain == None):
+        variant['algo_params']['pretrain'] = pretrain.lower() == 'true'
+    if not (algo_type == None):
+        variant['algo_type'] = algo_type.upper()
 
     # multi-processing
-    experiment(gpu, variant, seed)
+    seed = [int(s) for s in seed.split(",")]
+    print(f"Parsed seeds: {seed}")
+    if len(seed) > 1:
+        p = mp.Pool(2*len(gpu))
+        args = []
+        for i, s in enumerate(seed):
+            gpu_id = gpu[i % len(gpu)]
+            args.append((gpu_id, variant, s))
+        p.starmap(experiment, args)
+    else:
+        experiment(gpu_id=gpu[0], variant=variant, seed=seed[0])
 
 if __name__ == "__main__":
     main()

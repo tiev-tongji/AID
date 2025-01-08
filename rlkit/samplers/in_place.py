@@ -26,7 +26,8 @@ class InPlacePathSampler(object):
 
     def shutdown_worker(self):
         pass
-
+        
+    # def obtain_samples(self, deterministic=False, max_samples=np.inf, max_trajs=1, accum_context=False, resample=1, update_z_per_step=False, np_online_collect=False,
     def obtain_samples(self, deterministic=False, max_samples=np.inf, max_trajs=np.inf, accum_context=True, resample=1, update_z_per_step=False, np_online_collect=False,
                     use_np_online_decay=False, init_num=0, decay_function=None):
         """

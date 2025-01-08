@@ -59,6 +59,8 @@ class MultiTaskReplayBuffer(object):
     def clear_buffer(self, task):
         self.task_buffers[task].clear()
 
+    def get_all_data(self, task):
+        return self.task_buffers[task].get_all_data()
 
 def get_dim(space):
     if isinstance(space, Box):

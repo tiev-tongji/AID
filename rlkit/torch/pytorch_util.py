@@ -2,6 +2,25 @@ import torch
 import numpy as np
 import os
 
+import time
+from functools import wraps
+
+from line_profiler import LineProfiler
+import atexit
+
+profile = LineProfiler()
+atexit.register(profile.print_stats)
+
+def timer(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        end = time.time()
+        print(f"{func.__name__} 运行时间: {end - start:.4f} 秒")
+        return result
+    return wrapper
+
 
 def soft_update_from_to(source, target, tau):
     for target_param, param in zip(target.parameters(), source.parameters()):
@@ -51,7 +70,7 @@ def elem_or_tuple_to_variable(elem_or_tuple):
 
 def filter_batch(np_batch):
     for k, v in np_batch.items():
-        if v.dtype == np.bool:
+        if v.dtype == bool:
             yield k, v.astype(int)
         else:
             yield k, v
@@ -133,3 +152,42 @@ def zeros_like(*args, **kwargs):
 
 def normal(*args, **kwargs):
     return torch.normal(*args, **kwargs).to(device)
+
+class RunningMeanStd(object):
+    def __init__(self, epsilon=1e-4, shape=()):
+        """
+        calulates the running mean and std of a data stream
+        https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
+        :param epsilon: (float) helps with arithmetic issues
+        :param shape: (tuple) the shape of the data stream's output
+        """
+        self.mean = np.zeros(shape, 'float64')
+        self.var = np.ones(shape, 'float64')
+        self.count = epsilon
+
+    def update(self, arr):
+        batch_mean = np.mean(arr, axis=0)
+        batch_var = np.var(arr, axis=0)
+        batch_count = len(arr)
+        self.update_from_moments(batch_mean, batch_var, batch_count)
+
+    def update_from_moments(self, batch_mean, batch_var, batch_count):
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+
+        new_mean = self.mean + delta * batch_count / tot_count
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        m_2 = m_a + m_b + np.square(delta) * self.count * batch_count / (self.count + batch_count)
+        new_var = m_2 / (self.count + batch_count)
+
+        new_count = batch_count + self.count
+
+        self.mean = new_mean
+        self.var = new_var
+        self.count = new_count
+
+    def forward(self, x, inverse=False):
+        if inverse:
+            return x * np.sqrt(self.var) + self.mean
+        return (x - self.mean) / np.sqrt(self.var + 1e-8)

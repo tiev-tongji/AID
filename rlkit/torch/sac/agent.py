@@ -47,6 +47,7 @@ class PEARLAgent(nn.Module):
     def __init__(self,
                  latent_dim,
                  context_encoder,
+                 uncertainty_mlp,
                  policy,
                  **kwargs
     ):
@@ -54,16 +55,22 @@ class PEARLAgent(nn.Module):
         self.latent_dim = latent_dim
 
         self.context_encoder = context_encoder
+        self.uncertainty_mlp = uncertainty_mlp
         self.policy = policy
 
         self.recurrent = kwargs['recurrent']
         self.sparse_rewards = kwargs['sparse_rewards']
         self.use_next_obs_in_context = kwargs['use_next_obs_in_context']
+        self.use_z_min = kwargs['use_z_min']
+
+        if kwargs['separate_train'] and kwargs['pretrain']:
+            self.use_z_min = False
 
         # initialize buffers for z dist and z
         # use buffers so latent context can be saved along with model weights
         self.register_buffer('z', torch.zeros(1, latent_dim))
         self.register_buffer('z_means', torch.zeros(1, latent_dim))
+        self.register_buffer('z_mins', torch.zeros(1, latent_dim))
         self.register_buffer('z_vars', torch.zeros(1, latent_dim))
 
         self.clear_z()
@@ -76,6 +83,7 @@ class PEARLAgent(nn.Module):
         # reset distribution over z to the prior
         mu = ptu.zeros(num_tasks, self.latent_dim)
         var = ptu.zeros(num_tasks, self.latent_dim)
+        self.z_mins = mu
         self.z_means = mu
         self.z_vars = var
         # sample a new z from the prior
@@ -146,12 +154,29 @@ class PEARLAgent(nn.Module):
         ''' compute q(z|c) as a function of input context and sample new z from it'''
         params = self.context_encoder(context)
         params = params.view(context.size(0), -1, self.context_encoder.output_size)
+        heterodastic_var = self.uncertainty_mlp(params).detach()
         if task_indices is None:
             self.task_indices = np.zeros((context.size(0),))
         elif not hasattr(task_indices, '__iter__'):
             self.task_indices = np.array([task_indices])
         else:
             self.task_indices = np.array(task_indices)
+        # min_index = torch.argmin(heterodastic_var, dim=1).flatten()
+        # batch_indices = torch.arange(min_index.size(0))
+        # self.z_mins = params[batch_indices, min_index] # dim: task, batch, feature (latent dim)
+
+        # 计算5%-20%范围的indices
+        sorted_indices = torch.argsort(heterodastic_var, dim=1)  # 对heterodastic_var排序，返回索引
+        lower_bound = int(heterodastic_var.size(1) * 0.05)
+        upper_bound = int(heterodastic_var.size(1) * 0.40)
+
+        # 取5%-60%的索引
+        selected_indices = sorted_indices[:, lower_bound:upper_bound].squeeze()  # [task, selected_range][10, 563]
+        batch_indices = torch.arange(heterodastic_var.size(0)).unsqueeze(-1).expand(-1, selected_indices.size(-1))  # [10, 563]
+        selected_params = params[batch_indices, selected_indices]  # [task, selected_range, latent_dim] [10, 1024, 20]
+
+        # 计算平均值作为z_mins
+        self.z_mins = selected_params.mean(dim=1)  # [task, latent_dim]
         self.z_means = torch.mean(params, dim=1) # dim: task, batch, feature (latent dim)
         self.z_vars = torch.std(params, dim=1)
         self.sample_z()
@@ -163,10 +188,14 @@ class PEARLAgent(nn.Module):
 
     def sample_z(self):
         self.z = self.z_means
+        if self.use_z_min:
+            self.z = self.z_mins
 
     def get_action(self, obs, deterministic=False):
         ''' sample action from the policy, conditioned on the task embedding '''
         z = self.z
+        if self.use_z_min:
+            z = self.z_mins
         obs = ptu.from_numpy(obs[None])
         in_ = torch.cat([obs, z], dim=1)
         return self.policy.get_action(in_, deterministic=deterministic)
@@ -195,32 +224,15 @@ class PEARLAgent(nn.Module):
         return policy_outputs, task_z, task_z_vars
 
     def log_diagnostics(self, eval_statistics):
-        # adds logging data about encodings to eval_statistics
-        # z_mean = np.mean(np.abs(ptu.get_numpy(self.z_means[0])))
-        
-
         for i in range(len(self.z_means[0])):
             z_mean = ptu.get_numpy(self.z_means[0][i])
             name = 'Z mean eval' + str(i)
             eval_statistics[name] = z_mean
-        #z_mean1 = ptu.get_numpy(self.z_means[0][0])
-        #z_mean2 = ptu.get_numpy(self.z_means[0][1])
-        #z_mean3 = ptu.get_numpy(self.z_means[0][2])
-        #z_mean4 = ptu.get_numpy(self.z_means[0][3])
-        #z_mean5 = ptu.get_numpy(self.z_means[0][4])
-
-        #eval_statistics['Z mean eval1'] = z_mean1
-        #eval_statistics['Z mean eval2'] = z_mean2
-        #eval_statistics['Z mean eval3'] = z_mean3
-        #eval_statistics['Z mean eval4'] = z_mean4
-        #eval_statistics['Z mean eval5'] = z_mean5
         z_sig = np.mean(ptu.get_numpy(self.z_vars[0]))
         eval_statistics['Z variance eval'] = z_sig
 
-        # eval_statistics['Z mean eval'] = z_mean
-        # eval_statistics['Z variance eval'] = z_sig
         eval_statistics['task_idx'] = self.task_indices[0]
 
     @property
     def networks(self):
-        return [self.context_encoder, self.policy]
+        return [self.context_encoder, self.uncertainty_mlp, self.policy]

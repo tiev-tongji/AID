@@ -15,6 +15,7 @@ import pdb
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import torch
+import torch.nn.functional as F
 from pathlib import Path
 
 class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
@@ -25,7 +26,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             train_tasks,
             eval_tasks,
             goal_radius,
-            eval_deterministic=True,
+            eval_deterministic=False,
             render=False,
             render_eval_paths=False,
             plotter=None,
@@ -61,6 +62,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.embedding_mini_batch_size       = kwargs['embedding_mini_batch_size']
         self.max_path_length                 = kwargs['max_path_length']
         self.discount                        = kwargs['discount']
+
         self.replay_buffer_size              = kwargs['replay_buffer_size']
         self.reward_scale                    = kwargs['reward_scale']
         self.update_post_train               = kwargs['update_post_train']
@@ -75,12 +77,24 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.n_trj                           = kwargs['n_trj']
         self.allow_eval                      = kwargs['allow_eval']
         self.mb_replace                      = kwargs['mb_replace']
-        self.use_FOCAL_cl                    = kwargs['use_FOCAL_cl']
-        self.use_club                        = kwargs['use_club']
-        self.club_model_loss_weight          = kwargs['club_model_loss_weight']
-        self.club_loss_weight                = kwargs['club_loss_weight']
+        # self.use_FOCAL_cl                    = kwargs['use_FOCAL_cl']
+        # self.use_club                        = kwargs['use_club']
+        # self.club_model_loss_weight          = kwargs['club_model_loss_weight']
+        # self.club_loss_weight                = kwargs['club_loss_weight']
+        self.train_z0_policy                 = kwargs['train_z0_policy']
+        self.separate_train                  = kwargs['separate_train']
+        self.pretrain                      = kwargs['pretrain']
+
+
+        self.heterodastic_var_thresh_2       = 0
+        self.heterodastic_var_thresh_5       = 0
+        self.heterodastic_var_thresh_10      = 100
+        self.heterodastic_var_thresh_20      = 100
+        self.heterodastic_var_thresh_60      = 100
 
         self.eval_deterministic              = eval_deterministic
+        if kwargs.get('eval_deterministic') is not None:
+            eval_deterministic = kwargs.get('eval_deterministic')
         self.render                          = render
         self.eval_statistics                 = None
         self.render_eval_paths               = render_eval_paths
@@ -102,7 +116,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self._old_table_keys        = None
         self._current_path_builder  = PathBuilder()
         self._exploration_paths     = []
-        self.init_buffer()
+        # self.init_buffer()
 
     def init_buffer(self):
         train_trj_paths = []
@@ -224,15 +238,29 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 next_obs,
                 **{'env_info': {}},
             )
-        
+        if self.separate_train and not self.pretrain: # 分开训练的训练部分
+            train_context = ptu.from_numpy(np.concatenate([np.array(obs_train_lst), np.array(action_train_lst), np.array(reward_train_lst), np.array(next_obs_train_lst)], axis=-1))
+            train_z = self.agent.context_encoder(train_context[..., :self.agent.context_encoder.input_size])
+            train_z_var = F.softplus(self.agent.uncertainty_mlp(train_z)).detach().cpu().numpy()
+            self.heterodastic_var_thresh_2 = train_z_var.min() + 0.02 * (train_z_var.max() - train_z_var.min())
+            self.heterodastic_var_thresh_5 = train_z_var.min() + 0.05 * (train_z_var.max() - train_z_var.min())
+            self.heterodastic_var_thresh_10 = train_z_var.min() + 0.1 * (train_z_var.max() - train_z_var.min())
+            self.heterodastic_var_thresh_20 = train_z_var.min() + 0.2 * (train_z_var.max() - train_z_var.min())
+            self.heterodastic_var_thresh_60 = train_z_var.min() + 0.6 * (train_z_var.max() - train_z_var.min())
+            print(f"最小值：{train_z_var.min()}")
+            print(f"最大值：{train_z_var.max()}")
+            print(f'5%分位数: {self.heterodastic_var_thresh_5}')
+            print(f'20%分位数: {self.heterodastic_var_thresh_20}')
+            print(f"60%分位数: {self.heterodastic_var_thresh_60}")
+
     def _try_to_eval(self, epoch):
         if self._can_evaluate():
             self.evaluate(epoch)
             table_keys = logger.get_table_key_set()
-            if self._old_table_keys is not None:
-                assert table_keys == self._old_table_keys, (
-                    "Table keys cannot change from iteration to iteration."
-                )
+            # if self._old_table_keys is not None:
+            #     assert table_keys == self._old_table_keys, (
+            #         "Table keys cannot change from iteration to iteration."
+            #     )
             self._old_table_keys = table_keys
             logger.record_tabular("Number of train steps total", self._n_train_steps_total)
             logger.record_tabular("Number of env steps total",   self._n_env_steps_total)
@@ -326,13 +354,24 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
     def _do_eval(self, indices, epoch, buffer):
         online_final_returns = []
+        online_final_returns_first = []
+        online_final_returns_second = []
         online_all_return = []
         for idx in indices:
             all_rets = []
+            all_rets_first = []
+            all_rets_second = []
             for r in range(self.num_evals):
                 paths = self.collect_online_paths(idx, epoch, r, buffer)
-                all_rets.append([eval_util.get_average_returns([p]) for p in paths])
+                paths_first = paths[:len(paths)//2]
+                paths_second = paths[len(paths)//2:]
+                # all_rets.append([eval_util.get_average_returns([p]) for p in paths])
+                all_rets_first.append([eval_util.get_average_returns([p]) for p in paths_first])
+                all_rets_second.append([eval_util.get_average_returns([p]) for p in paths_second])
+                all_rets.append([(eval_util.get_average_returns([p]) + eval_util.get_average_returns([q])) / 2 for p, q in zip(paths_first, paths_second)])
             online_final_returns.append(np.mean([a[-1] for a in all_rets]))
+            online_final_returns_first.append(np.mean([a[-1] for a in all_rets_first]))
+            online_final_returns_second.append(np.mean([a[-1] for a in all_rets_second]))
             # record all returns for the first n trajectories
             n = min([len(a) for a in all_rets])
             all_rets = [a[:n] for a in all_rets]
@@ -373,7 +412,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         n = min([len(t) for t in np_online_all_return])
         np_online_all_return = [t[:n] for t in np_online_all_return]
 
-        return online_final_returns, online_all_return, offline_final_returns, offline_all_return, np_online_final_returns, np_online_all_return
+        return online_final_returns, online_final_returns_first, online_final_returns_second, online_all_return, offline_final_returns, offline_all_return, np_online_final_returns, np_online_all_return
 
     def train(self, tb_writer):
         '''
@@ -434,8 +473,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
         ### test tasks
         eval_util.dprint('evaluating on {} test tasks'.format(len(self.eval_tasks)))
-        test_online_final_returns, test_online_all_returns, test_offline_final_returns, test_offline_all_returns, test_np_online_final_returns, test_np_online_all_returns = self._do_eval(self.eval_tasks, epoch, buffer=self.eval_buffer)
-        train_online_final_returns, train_online_all_returns, train_offline_final_returns, train_offline_all_returns, train_np_online_final_returns, train_np_online_all_returns = self._do_eval(self.train_tasks, epoch, buffer=self.replay_buffer)
+        test_online_final_returns_avg, test_online_final_returns_fir, test_online_final_returns_sec, test_online_all_returns, test_offline_final_returns, test_offline_all_returns, test_np_online_final_returns, test_np_online_all_returns = self._do_eval(self.eval_tasks, epoch, buffer=self.eval_buffer)
+        train_online_final_returns_avg, train_online_final_returns_fir, train_online_final_returns_sec, train_online_all_returns, train_offline_final_returns, train_offline_all_returns, train_np_online_final_returns, train_np_online_all_returns = self._do_eval(self.train_tasks, epoch, buffer=self.replay_buffer)
         eval_util.dprint('test online all returns')
         eval_util.dprint(test_online_all_returns)
         eval_util.dprint('test offline all returns')
@@ -446,10 +485,14 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         # save the final posterior
         self.agent.log_diagnostics(self.eval_statistics)
             
-        avg_test_online_final_return = np.mean(test_online_final_returns)
+        avg_test_online_final_return = np.mean(test_online_final_returns_avg)
+        fir_test_online_final_return = np.mean(test_online_final_returns_fir)
+        sec_test_online_final_return = np.mean(test_online_final_returns_sec)
         avg_test_offline_final_return = np.mean(test_offline_final_returns)
         avg_test_np_online_final_return = np.mean(test_np_online_final_returns)
-        avg_train_online_final_return = np.mean(train_online_final_returns)
+        avg_train_online_final_return = np.mean(train_online_final_returns_avg)
+        fir_train_online_final_return = np.mean(train_online_final_returns_fir)
+        sec_train_online_final_return = np.mean(train_online_final_returns_sec)
         avg_train_offline_final_return = np.mean(train_offline_final_returns)
         avg_train_np_online_final_return = np.mean(train_np_online_final_returns)
 
@@ -462,9 +505,13 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         avg_train_np_online_all_return = np.mean(np.stack(train_np_online_all_returns), axis=0)
             
         self.eval_statistics['Average_OnlineReturn_all_test_tasks'] = avg_test_online_final_return
+        self.eval_statistics['first_OnlineReturn_all_test_tasks'] = fir_test_online_final_return
+        self.eval_statistics['second_OnlineReturn_all_test_tasks'] = sec_test_online_final_return
         self.eval_statistics['Average_OfflineReturn_all_test_tasks'] = avg_test_offline_final_return
         self.eval_statistics['Average_NpOnlineReturn_all_test_tasks'] = avg_test_np_online_final_return
         self.eval_statistics['Average_OnlineReturn_all_train_tasks'] = avg_train_online_final_return
+        self.eval_statistics['first_OnlineReturn_all_train_tasks'] = fir_train_online_final_return
+        self.eval_statistics['second_OnlineReturn_all_train_tasks'] = sec_train_online_final_return
         self.eval_statistics['Average_OfflineReturn_all_train_tasks'] = avg_train_offline_final_return
         self.eval_statistics['Average_NpOnlineReturn_all_train_tasks'] = avg_train_np_online_final_return
 
@@ -485,6 +532,9 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         for key, value in self.eval_statistics.items():
             logger.record_tabular(key, value)
         self.eval_statistics = None
+
+        if self.separate_train and not self.pretrain:
+            return
 
         if self.plotter:
             self.plotter.draw()
@@ -554,8 +604,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.agent.clear_z()
         paths = []
         num_transitions = 0
-        # num_trajs = 0
-        while num_transitions < self.num_steps_per_eval:
+        while num_transitions < self.num_steps_per_eval: # 20 / 40
             path, num = self.sampler.obtain_samples(
                 deterministic=self.eval_deterministic,
                 max_samples=self.num_steps_per_eval - num_transitions,
@@ -565,7 +614,6 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             num_transitions += num
             if num_transitions >= self.num_exp_traj_eval * self.max_path_length:
                 self.agent.infer_posterior(self.agent.context)
-                # self.agent.context = None
 
         if self.sparse_rewards:
             for p in paths:
@@ -678,7 +726,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             zs.append(paths[-1]['context'])
         return np.concatenate(zs, axis=0)
 
-    def vis_task_embeddings(self, save_dir, fig_name, zs, rows=1, cols=1, n_figs=1,
+    @staticmethod
+    def vis_task_embeddings(save_dir, fig_name, zs, rows=1, cols=1, n_figs=1,
                 subplot_title_lst = ["train_itr_0"],  goals_name_lst=None, figsize=[12, 6], fontsize=15):
         if figsize is None:
             fig = plt.figure(figsize=(8, 10))

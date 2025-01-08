@@ -234,20 +234,8 @@ def rollout(env, agent, max_path_length=np.inf, accum_context=True, update_z_per
     if animated:
         env.render()
     while path_length < max_path_length:
-        logging.info('task_indices:')
-        logging.info(agent.task_indices)
-        logging.info('z')
-        logging.info(agent.z)
-        logging.info('o:')
-        logging.info(o)
         a, agent_info = agent.get_action(o)
         next_o, r, d, env_info = env.step(a)
-        logging.info('next_o:')
-        logging.info(next_o)
-        logging.info('a')
-        logging.info(a)
-        logging.info('r')
-        logging.info(r)
 
         if callable(getattr(env, "sparsify_rewards", None)):
             env_info = {'sparse_reward': env.sparsify_rewards(r)}
@@ -337,12 +325,6 @@ def np_online_rollout(env, agent, max_path_length=np.inf, accum_context=True, up
     if animated:
         env.render()
     while path_length < max_path_length:
-        logging.info('task_indices:')
-        logging.info(agent.task_indices)
-        logging.info('z')
-        logging.info(agent.z)
-        logging.info('o:')
-        logging.info(o)
         a_noise = np.random.uniform(-1,1,action_size)
         if use_np_online_decay:
             a, agent_info = agent.get_action(o)
@@ -355,12 +337,6 @@ def np_online_rollout(env, agent, max_path_length=np.inf, accum_context=True, up
             agent_info = {}
         next_o, r, d, env_info = env.step(a)
         num += 1
-        logging.info('next_o:')
-        logging.info(next_o)
-        logging.info('a')
-        logging.info(a)
-        logging.info('r')
-        logging.info(r)
 
         if callable(getattr(env, "sparsify_rewards", None)):
             env_info = {'sparse_reward': env.sparsify_rewards(r)}
