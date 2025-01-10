@@ -561,7 +561,8 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             self.eval_statistics['Z variance train'] = z_sig
             self.eval_statistics['task idx'] = indices[0]
             print(len(self.loss.items()))
-            self.eval_statistics['Heteroscedastic Var'] = self.loss["heteroscedastic_var"]
+            if self.loss.get("heteroscedastic_var") is not None:
+                self.eval_statistics['Heteroscedastic Var'] = self.loss["heteroscedastic_var"]
             self.eval_statistics['Heteroscedastic Loss'] = self.loss["heteroscedastic_loss"]
             if self.loss.get("focal_loss") is not None:
                 self.eval_statistics['FOCAL Loss'] = self.loss["focal_loss"]
@@ -670,10 +671,10 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         # 计算异方差损失
         if self.use_hvar:
             heteroscedastic_loss, heteroscedastic_var = self.HeteroscedasticLoss(context, total_loss)
+            self.loss["heteroscedastic_var"] = heteroscedastic_var.item()
         else:
             heteroscedastic_loss = total_loss
         heteroscedastic_loss.backward()
-        self.loss["heteroscedastic_var"] = heteroscedastic_var.item()
         self.loss["heteroscedastic_loss"] = heteroscedastic_loss.item()
 
         # 更新优化器 分开训练的训练部分不更新

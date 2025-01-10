@@ -19,9 +19,6 @@ from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
 from rlkit.torch.sac.sac import CSROSoftActorCritic
-from rlkit.torch.sac.croo import CROOSoftActorCritic
-from rlkit.torch.sac.unicorn import UNICORNSoftActorCritic
-from rlkit.torch.sac.classifier import CLASSIFIERSoftActorCritic 
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu

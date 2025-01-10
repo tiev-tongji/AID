@@ -356,22 +356,27 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         online_final_returns = []
         online_final_returns_first = []
         online_final_returns_second = []
+        online_final_returns_trird = []
         online_all_return = []
         for idx in indices:
             all_rets = []
             all_rets_first = []
             all_rets_second = []
+            all_rets_trird = []
             for r in range(self.num_evals):
                 paths = self.collect_online_paths(idx, epoch, r, buffer)
-                paths_first = paths[:len(paths)//2]
-                paths_second = paths[len(paths)//2:]
+                paths_first = paths[0]
+                paths_second = paths[1]
+                paths_trird = paths[2]
                 # all_rets.append([eval_util.get_average_returns([p]) for p in paths])
-                all_rets_first.append([eval_util.get_average_returns([p]) for p in paths_first])
-                all_rets_second.append([eval_util.get_average_returns([p]) for p in paths_second])
-                all_rets.append([(eval_util.get_average_returns([p]) + eval_util.get_average_returns([q])) / 2 for p, q in zip(paths_first, paths_second)])
+                all_rets_first.append([eval_util.get_average_returns([paths_first])])
+                all_rets_second.append([eval_util.get_average_returns([paths_second])])
+                all_rets_trird.append([eval_util.get_average_returns([paths_trird])])
+                all_rets.append([(eval_util.get_average_returns([paths_first]) + eval_util.get_average_returns([paths_second]) + eval_util.get_average_returns([paths_trird]))/3])
             online_final_returns.append(np.mean([a[-1] for a in all_rets]))
             online_final_returns_first.append(np.mean([a[-1] for a in all_rets_first]))
             online_final_returns_second.append(np.mean([a[-1] for a in all_rets_second]))
+            online_final_returns_trird.append(np.mean([a[-1] for a in all_rets_trird]))
             # record all returns for the first n trajectories
             n = min([len(a) for a in all_rets])
             all_rets = [a[:n] for a in all_rets]
@@ -412,7 +417,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         n = min([len(t) for t in np_online_all_return])
         np_online_all_return = [t[:n] for t in np_online_all_return]
 
-        return online_final_returns, online_final_returns_first, online_final_returns_second, online_all_return, offline_final_returns, offline_all_return, np_online_final_returns, np_online_all_return
+        return online_final_returns, [online_final_returns_first, online_final_returns_second, online_final_returns_trird], online_all_return, offline_final_returns, offline_all_return, np_online_final_returns, np_online_all_return
 
     def train(self, tb_writer):
         '''
@@ -473,8 +478,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
         ### test tasks
         eval_util.dprint('evaluating on {} test tasks'.format(len(self.eval_tasks)))
-        test_online_final_returns_avg, test_online_final_returns_fir, test_online_final_returns_sec, test_online_all_returns, test_offline_final_returns, test_offline_all_returns, test_np_online_final_returns, test_np_online_all_returns = self._do_eval(self.eval_tasks, epoch, buffer=self.eval_buffer)
-        train_online_final_returns_avg, train_online_final_returns_fir, train_online_final_returns_sec, train_online_all_returns, train_offline_final_returns, train_offline_all_returns, train_np_online_final_returns, train_np_online_all_returns = self._do_eval(self.train_tasks, epoch, buffer=self.replay_buffer)
+        test_online_final_returns_avg, test_online_final_returns, test_online_all_returns, test_offline_final_returns, test_offline_all_returns, test_np_online_final_returns, test_np_online_all_returns = self._do_eval(self.eval_tasks, epoch, buffer=self.eval_buffer)
+        train_online_final_returns_avg, train_online_final_returns, train_online_all_returns, train_offline_final_returns, train_offline_all_returns, train_np_online_final_returns, train_np_online_all_returns = self._do_eval(self.train_tasks, epoch, buffer=self.replay_buffer)
         eval_util.dprint('test online all returns')
         eval_util.dprint(test_online_all_returns)
         eval_util.dprint('test offline all returns')
@@ -484,15 +489,19 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
         # save the final posterior
         self.agent.log_diagnostics(self.eval_statistics)
-            
+        
+        test_online_final_returns_fir, test_online_final_returns_sec, test_online_final_returns_trird = test_online_final_returns
         avg_test_online_final_return = np.mean(test_online_final_returns_avg)
         fir_test_online_final_return = np.mean(test_online_final_returns_fir)
         sec_test_online_final_return = np.mean(test_online_final_returns_sec)
+        trird_test_online_final_return = np.mean(test_online_final_returns_trird)
         avg_test_offline_final_return = np.mean(test_offline_final_returns)
         avg_test_np_online_final_return = np.mean(test_np_online_final_returns)
+        train_online_final_returns_fir, train_online_final_returns_sec, train_online_final_returns_trird = train_online_final_returns
         avg_train_online_final_return = np.mean(train_online_final_returns_avg)
         fir_train_online_final_return = np.mean(train_online_final_returns_fir)
         sec_train_online_final_return = np.mean(train_online_final_returns_sec)
+        trird_train_online_final_return = np.mean(train_online_final_returns_trird)
         avg_train_offline_final_return = np.mean(train_offline_final_returns)
         avg_train_np_online_final_return = np.mean(train_np_online_final_returns)
 
@@ -507,11 +516,13 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.eval_statistics['Average_OnlineReturn_all_test_tasks'] = avg_test_online_final_return
         self.eval_statistics['first_OnlineReturn_all_test_tasks'] = fir_test_online_final_return
         self.eval_statistics['second_OnlineReturn_all_test_tasks'] = sec_test_online_final_return
+        self.eval_statistics['trird_OnlineReturn_all_test_tasks'] = trird_test_online_final_return
         self.eval_statistics['Average_OfflineReturn_all_test_tasks'] = avg_test_offline_final_return
         self.eval_statistics['Average_NpOnlineReturn_all_test_tasks'] = avg_test_np_online_final_return
         self.eval_statistics['Average_OnlineReturn_all_train_tasks'] = avg_train_online_final_return
         self.eval_statistics['first_OnlineReturn_all_train_tasks'] = fir_train_online_final_return
         self.eval_statistics['second_OnlineReturn_all_train_tasks'] = sec_train_online_final_return
+        self.eval_statistics['trird_OnlineReturn_all_train_tasks'] = trird_train_online_final_return
         self.eval_statistics['Average_OfflineReturn_all_train_tasks'] = avg_train_offline_final_return
         self.eval_statistics['Average_NpOnlineReturn_all_train_tasks'] = avg_train_np_online_final_return
 
@@ -604,10 +615,10 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.agent.clear_z()
         paths = []
         num_transitions = 0
-        while num_transitions < self.num_steps_per_eval: # 20 / 40
+        for _ in range(3): # 20 / 40
             path, num = self.sampler.obtain_samples(
                 deterministic=self.eval_deterministic,
-                max_samples=self.num_steps_per_eval - num_transitions,
+                max_samples=np.inf,
                 max_trajs=1,
                 accum_context=True)
             paths += path
