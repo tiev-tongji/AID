@@ -62,6 +62,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         ## 训练参数
         self.soft_target_tau                = kwargs['soft_target_tau'] # 软目标更新
         self.allow_backward_z               = kwargs['allow_backward_z'] # 是否允许梯度通过z流动
+        self.num_ensemble                   = kwargs['num_ensemble'] # IDAQ
 
         # BRAC参数
         self.use_brac                       = kwargs['use_brac'] # 是否使用BRAC
@@ -126,9 +127,10 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         self.vib_criterion                  = nn.MSELoss()
         self.l2_reg_criterion               = nn.MSELoss()
         self.club_criterion                 = nn.MSELoss()
+        self.pred_loss                      = nn.MSELoss()
         self.cross_entropy_loss             = nn.CrossEntropyLoss()
 
-        self.qf1, self.qf2, _, _, self.club_model, self.context_decoder, self.classifier = nets[1:]
+        self.qf1, self.qf2, _, _, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models = nets[1:]
         if self.policy_update_strategy == 'BRAC':
             self.vf                             = nets[3]
             self.target_vf                      = self.vf.copy()
@@ -173,6 +175,8 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         # self.behavior_encoder_optimizer     = optimizer_class(self.behavior_encoder.parameters(), lr=self.context_lr)
         self.context_decoder_optimizer      = optimizer_class(self.context_decoder.parameters(), lr=self.context_lr)
         self.classifier_optimizer           = optimizer_class(self.classifier.parameters(), lr=self.context_lr)
+        self.reward_models_optimizer = optimizer_class(self.reward_models.parameters(), lr=self.qf_lr)
+        self.dynamic_models_optimizer = optimizer_class(self.dynamic_models.parameters(), lr=self.qf_lr)
         
         self.policy_optimizer               = optimizer_class(self.agent.policy.parameters(), lr=self.policy_lr)
         self.uncertainty_mlp_optimizer      = optimizer_class(self.agent.uncertainty_mlp.parameters(), lr=self.context_lr)
@@ -187,9 +191,9 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
     @property
     def networks(self):
         if self.policy_update_strategy == 'BRAC':
-            return self.agent.networks + [self.qf1, self.qf2, self.vf, self.target_vf, self.c, self.club_model, self.context_decoder, self.classifier]
+            return self.agent.networks + [self.qf1, self.qf2, self.vf, self.target_vf, self.c, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models]
         elif self.policy_update_strategy == 'TD3BC':
-            return self.agent.networks + [self.qf1, self.qf2, self.target_qf1, self.target_qf2, self.club_model, self.context_decoder, self.classifier]
+            return self.agent.networks + [self.qf1, self.qf2, self.target_qf1, self.target_qf2, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models]
 
     @property
     def get_alpha(self):
@@ -515,6 +519,30 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         loss = self.cross_entropy_loss(logits/self.infoNCE_temp , labels)
         return loss
 
+    def Reward_Prediction_loss(self, indices, task_z):
+        model_loss = None
+        num_tasks = len(indices)
+        for i in range(self.num_ensemble):
+            obs1, actions1, rewards1, next_obs1, terms1 = self.sample_sac(indices)
+            t, b, _ = obs1.size()
+            obs1 = obs1.view(t * b, -1)
+            actions1 = actions1.view(t * b, -1)
+            next_obs1 = next_obs1.view(t * b, -1)
+            pred_rewardss1 = rewards1.view(self.batch_size * num_tasks, -1)
+
+            rew_pred1 = self.reward_models[i].forward(0, 0, task_z.detach(), obs1, actions1)
+            next_obs_pred1=self.dynamic_models[i].forward(0, 0, task_z.detach(), obs1, actions1)
+
+
+            rew_loss = self.pred_loss(pred_rewardss1, rew_pred1)
+            dynamic_loss = self.pred_loss(next_obs1, next_obs_pred1)
+
+            if model_loss is None:
+                model_loss = rew_loss
+            else:
+                model_loss = model_loss + rew_loss + dynamic_loss
+        return model_loss
+
     def HeteroscedasticLoss(self, context, loss):
         latent_z = self.agent.encode_no_mean(context).view(-1, self.latent_dim)
         heteroscedastic_var = torch.mean(F.softplus(self.agent.uncertainty_mlp(latent_z.detach())))
@@ -593,6 +621,8 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             self.eval_statistics['QF Loss'] = self.loss["qf_loss"]
             if self.loss.get("policy_loss") is not None:
                 self.eval_statistics['Policy Loss'] = self.loss["policy_loss"]
+            if self.loss.get('reward_prediction_loss') is not None:
+                self.eval_statistics['Reward Prediction Loss'] = self.loss['reward_prediction_loss']
             self.eval_statistics.update(create_stats_ordered_dict('Q Predictions',  self.loss["q1_pred"]))
             self.eval_statistics.update(create_stats_ordered_dict('Log Pis',        self.loss["log_pi"]))
             self.eval_statistics.update(create_stats_ordered_dict('Policy mu',      self.loss["policy_mean"]))
@@ -786,6 +816,15 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         self.loss["q1_pred"] = torch.mean(q1_pred).item()
         self.loss["q2_pred"] = torch.mean(q2_pred).item()
 
+        # if self.algo_type == 'IDAQ': # TODO 是放在这里还是放在预训练部分
+        #     model_loss = self.Reward_Prediction_loss(indices, task_z)
+        #     self.loss["reward_prediction_loss"] = torch.mean(model_loss).item()
+        #     self.reward_models_optimizer.zero_grad()
+        #     self.dynamic_models_optimizer.zero_grad()
+        #     model_loss.backward()
+        #     self.reward_models_optimizer.step()
+        #     self.dynamic_models_optimizer.step()
+
         # V 函数目标值
         min_q_new_actions = self._min_q(t, b, obs, new_actions, task_z.detach())
         if self.max_entropy:
@@ -960,6 +999,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
                 policy=self.agent.policy.state_dict(),
                 uncertainty_mlp=self.agent.uncertainty_mlp.state_dict(),
                 context_encoder=self.agent.context_encoder.state_dict(),
+
                 )
         elif self.policy_update_strategy == 'TD3BC':
             snapshot = OrderedDict(
@@ -973,6 +1013,8 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
                 policy=self.agent.policy.state_dict(),
                 uncertainty_mlp=self.agent.uncertainty_mlp.state_dict(),
                 context_encoder=self.agent.context_encoder.state_dict(),
+                reward_models=[reward_model.state_dict() for reward_model in self.reward_models],
+                dynamic_models=[dynamic_model.state_dict() for dynamic_model in self.dynamic_models],
                 )
         else:
             raise NotImplementedError

@@ -12,6 +12,27 @@ import torch
 import random
 import multiprocessing as mp
 from itertools import product
+import sys
+from tensorboardX import SummaryWriter
+
+mujoco_version = '200'  # 默认版本
+if '--mujoco_version' in sys.argv:
+    idx = sys.argv.index('--mujoco_version')
+    if idx + 1 < len(sys.argv):
+        mujoco_version = sys.argv[idx + 1].strip()
+
+# 设置 MuJoCo 环境变量
+if mujoco_version == '131':
+    os.environ['MUJOCO_PY_MJPRO_PATH'] = '/home/autolab/.mujoco/mujoco131'
+    os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:/home/autolab/.mujoco/mujoco131/bin:/usr/lib/nvidia"
+elif mujoco_version == '200':
+    os.environ['MUJOCO_PY_MJPRO_PATH'] = '/home/autolab/.mujoco/mujoco200'
+    os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:/home/autolab/.mujoco/mujoco200/bin:/usr/lib/nvidia"
+else:
+    raise ValueError(f"Unsupported MuJoCo version: {mujoco_version}. Supported versions: '131', '200'")
+
+print(f"MuJoCo version {mujoco_version} set successfully!")
+
 
 from rlkit.envs import ENVS
 from rlkit.envs.wrappers import NormalizedBoxEnv
@@ -23,9 +44,6 @@ from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
 from configs.default import default_config
-import pdb
-from tensorboardX import SummaryWriter
-
 
 def global_seed(seed=0):
     torch.manual_seed(seed)
@@ -52,6 +70,14 @@ def experiment(gpu_id, variant, seed=None):
     obs_dim = int(np.prod(env.observation_space.shape))
     action_dim = int(np.prod(env.action_space.shape))
     reward_dim = 1
+
+    if variant['algo_type'] == 'IDAQ':
+        variant['algo_params']['train_z0_policy'] = False
+        variant['algo_params']['use_hvar'] = False
+        variant['algo_params']['z_strategy'] = 'mean'
+    if variant['algo_params']['separate_train'] == True and variant['algo_params']['pretrain'] == True:
+        variant['algo_params']['z_strategy'] = 'mean'
+
 
     # instantiate networks
     latent_dim = variant['latent_size']
@@ -111,6 +137,20 @@ def experiment(gpu_id, variant, seed=None):
         output_size=1,
     )
 
+    reward_models = torch.nn.ModuleList()
+    dynamic_models = torch.nn.ModuleList()
+    for _ in range(variant['algo_params']['num_ensemble']):
+        reward_models.append(
+            FlattenMlp(hidden_sizes=[net_size, net_size, net_size],
+                       input_size=latent_dim + obs_dim + action_dim,
+                       output_size=1, )
+        )
+        dynamic_models.append(
+            FlattenMlp(hidden_sizes=[net_size, net_size, net_size],
+                       input_size=latent_dim + obs_dim + action_dim,
+                       output_size=obs_dim, )
+        )
+
     qf1 = FlattenMlp(
         hidden_sizes=[net_size, net_size, net_size],
         input_size=obs_dim + action_dim + latent_dim,
@@ -163,7 +203,7 @@ def experiment(gpu_id, variant, seed=None):
         env=env,
         train_tasks=train_tasks,
         eval_tasks=eval_tasks,
-        nets=[agent, qf1, qf2, vf, c, club_model, context_decoder, classifier],
+        nets=[agent, qf1, qf2, vf, c, club_model, context_decoder, classifier, reward_models, dynamic_models],
         latent_dim=latent_dim,
         goal_radius=goal_radius,
         seed=seed,
@@ -246,13 +286,17 @@ def deep_update_dict(fr, to):
 
 @click.command()
 @click.argument('config', default=None)
+@click.option('--mujoco_version', type=click.Choice(['131', '200'], case_sensitive=False), default='200', help='MuJoCo version, default is --mujoco_version=200')
 @click.option('--gpu', default="0,1,2,3", type=str, help="Comma-separated list of gpu.")
 @click.option('--seed', default="0", type=str, help="Comma-separated list of seeds.")
 @click.option('--exp_name', default=None)
 @click.option('--pretrain', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
-@click.option('--algo_type', type=click.Choice(['FOCAL', 'CSRO', 'CORRO', 'UNICORN', 'CLASSIFIER', 'CROO'], case_sensitive=False), default=None)
-def main(config, gpu, seed, exp_name=None, pretrain=None, algo_type=None):
-
+@click.option('--algo_type', type=click.Choice(['FOCAL', 'CSRO', 'CORRO', 'UNICORN', 'CLASSIFIER', 'CROO', 'IDAQ'], case_sensitive=False), default=None)
+@click.option('--train_z0_policy', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
+@click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
+@click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)
+@click.option('--r_thres', default=None)
+def main(config, mujoco_version, gpu, seed, exp_name=None, pretrain=None, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
     variant = default_config
     if config:
         with open(os.path.join(config)) as f:
@@ -269,6 +313,14 @@ def main(config, gpu, seed, exp_name=None, pretrain=None, algo_type=None):
         variant['algo_params']['pretrain'] = pretrain.lower() == 'true'
     if not (algo_type == None):
         variant['algo_type'] = algo_type.upper()
+    if not (train_z0_policy == None):
+        variant['algo_params']['train_z0_policy'] = train_z0_policy.lower() == 'true'
+    if not (use_hvar == None):
+        variant['algo_params']['use_hvar'] = use_hvar.lower() == 'true'
+    if not (z_strategy == None):
+        variant['algo_params']['z_strategy'] = z_strategy
+    if not (r_thres == None):
+        variant['algo_params']['r_thres'] = float(r_thres)
 
     # multi-processing
     seed = [int(s) for s in seed.split(",")]

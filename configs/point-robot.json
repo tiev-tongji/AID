@@ -16,14 +16,14 @@
         "replay_buffer_size": 200000,
         "num_tasks_sample": 10,
         "num_train_steps_per_itr": 1000,
-        "num_steps_per_eval": 40,
+        "num_steps_per_eval": 180,
         "embedding_batch_size": 1024,
         "embedding_mini_batch_size": 1024,
         "max_path_length": 20,
         "discount": 0.90,
         "reward_scale": 100.0,
         "sparse_rewards": 0,
-        "num_exp_traj_eval": 1,
+        "num_exp_traj_eval": 3,
         "dump_eval_paths": 0,
         "train_epoch": [
             200,
@@ -44,7 +44,7 @@
         "FOCAL": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/focal_mix_z0_no_pose_hvar_pre/seed1/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_z0_no_pose_hvar_pre/seed1/agent.pth"
         },
         "CSRO": {
             "use_focal_loss": true,
@@ -58,24 +58,29 @@
             "use_infoNCE_loss": true,
             "infoNCE_loss_weight": 1.0,
             "infoNCE_temp": 0.1,
-            "pretrained_agent_path": "logs/point-robot/corro_mix_z0_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/corro_mix_z0_pre/seed0/agent.pth"
         },
         "UNICORN": {
             "use_focal_loss": true,
             "use_recon_loss": true,
             "focal_loss_weight": 0.5,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/unicorn_mix_z0_nodetach_pre"
+            "pretrained_agent_path": "logs/point-robot/pre/unicorn_mix_z0_nodetach_pre"
         },
         "CLASSIFIER": {
             "use_classify_loss": true,
             "classify_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/classifier_mix_z0_hvar_pre_nodetec/seed0/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/classifier_mix_z0_hvar_pre/seed0/agent.pth"
         },
         "CROO": {
             "use_croo_loss": true,
             "croo_loss_weight": 1.0,
             "pretrained_agent_path": "logs/point-robot/"
+        },
+        "IDAQ": {
+            "use_focal_loss": true,
+            "focal_loss_weight": 1.0,
+            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_baseline_pre/seed0/agent.pth"
         }
     },
     "util_params": {
@@ -83,5 +88,5 @@
         "debug": false,
         "exp_name": "CSRO"
     },
-    "algo_type": "CLASSIFIER"
+    "algo_type": "FOCAL"
 }

@@ -1,6 +1,6 @@
 import numpy as np
 import logging
-import pdb
+import torch
 
 def offline_rollout(env, agent, buffer, max_path_length=np.inf, accum_context=True, animated=False, save_frames=False):
     # perform online rollout as in rollout()
@@ -386,6 +386,157 @@ def np_online_rollout(env, agent, max_path_length=np.inf, accum_context=True, up
         env_infos=env_infos,
     )
 
+def ensemble_rollout(env, agent, max_path_length=np.inf, accum_context=True, is_select=False, animated=False,
+            save_frames=False, r_thres=0., is_onlineadapt_max=False, is_sparse_reward=False,reward_models=None,dynamic_models=None,update_score=True,use_std=False):
+    """
+    The following value for the following keys will be a 2D array, with the
+    first dimension corresponding to the time dimension.
+     - observations
+     - actions
+     - rewards
+     - next_observations
+     - terminals
+
+    The next two elements will be lists of dictionaries, with the index into
+    the list being the index into the time
+     - agent_infos
+     - env_infos
+
+    :param env:
+    :param agent:
+    :param max_path_length:
+    :param accum_context: if True, accumulate the collected context
+    :param animated:
+    :param save_frames: if True, save video of rollout
+    :return:
+    """
+    observations = []
+    actions = []
+    rewards = []
+    terminals = []
+    agent_infos = []
+    env_infos = []
+    o = env.reset()
+    next_o = None
+    path_length = 0
+
+    context = []
+    scores = []
+
+    if animated:
+        env.render()
+    while path_length < max_path_length:
+        a, agent_info = agent.get_action(o)
+        next_o, r, d, env_info = env.step(a)
+
+        context.append([o, a, r, next_o, d, env_info])
+        if is_select or is_onlineadapt_max:
+            if is_sparse_reward:
+                scores.append(env_info['sparse_reward'])
+            else:
+                scores.append(r)
+
+        '''
+        # update the agent's current context
+        if accum_context:
+            if not is_select:
+                agent.update_context([o, a, r, next_o, d, env_info])
+            elif env_info['sparse_reward'] > 0.:
+                agent.update_context([o, a, r, next_o, d, env_info])
+        '''
+
+        observations.append(o)
+        rewards.append(r)
+        terminals.append(d)
+        actions.append(a)
+        agent_infos.append(agent_info)
+        path_length += 1
+        o = next_o
+        if animated:
+            env.render()
+        if save_frames:
+            from PIL import Image
+            image = Image.fromarray(np.flipud(env.get_image()))
+            env_info['frame'] = image
+        env_infos.append(env_info)
+        if d:
+            break
+    observation_batch = torch.from_numpy(np.array(observations)).to(agent.z.device)
+    action_batch = torch.from_numpy(np.array(actions)).to(agent.z.device)
+
+    n_observations = np.array(observations)
+    if len(n_observations.shape) == 1:
+        n_observations = np.expand_dims(n_observations, 1)
+        n_next_o = np.array([next_o])
+    else:
+        n_next_o = next_o
+    n_next_observations = np.vstack(
+        (
+            n_observations[1:, :],
+            np.expand_dims(n_next_o, 0)
+        )
+    )
+
+    # num_ensemble = len(reward_models)
+    # reward_predictions = []
+    # prediction_errors = []
+    # dynamics_predictions = []
+    # pes = []
+    # for i in range(num_ensemble):
+    #     reward_prediction = reward_models[i].forward(0, 0, agent.z.detach().float().repeat(observation_batch.shape[0],1), observation_batch.float(), action_batch.float())
+    #     dynamic_prediction = dynamic_models[i].forward(0, 0, agent.z.detach().float().repeat(observation_batch.shape[0], 1),
+    #                                           observation_batch.float(), action_batch.float())
+    #     reward_predictions.append(reward_prediction)
+    #     dynamics_predictions.append(dynamic_prediction)
+    #     pe = ((reward_prediction-torch.from_numpy(np.array(rewards).reshape(-1, 1)).to(agent.z.device).float())**2).mean()+((dynamic_prediction-torch.from_numpy(n_next_observations).to(agent.z.device).float())**2).mean()
+    #     pes.append(pe)
+    #     prediction_errors.append(((reward_prediction-torch.from_numpy(np.array(rewards).reshape(-1, 1)).to(agent.z.device).float())**2).mean().item()+((dynamic_prediction-torch.from_numpy(n_next_observations).to(agent.z.device).float())**2).mean().item())
+    # reward_predictions = torch.stack(reward_predictions)
+    # dynamics_predictions = torch.stack(dynamics_predictions)
+    # pes = torch.stack(pes)
+
+
+    # uncentainty = pes.mean()
+    # if use_std:
+    #     uncentainty = torch.std(reward_predictions, dim=1).mean() + torch.std(dynamics_predictions, dim=1).mean()
+    # update the agent's current context
+    if accum_context:
+        if is_onlineadapt_max:
+            if update_score:
+                agent.update_onlineadapt_max(-1 * uncentainty, context)
+            else:
+                agent.fix_update_onlineadapt_max(-1 * uncentainty, context)
+            if update_score:
+                print(use_std,uncentainty.item(),',',np.sum(scores),'!!!')
+        elif not is_select or np.sum(scores) > r_thres: # return-based
+            # print('A!')
+            for c in context:
+                agent.update_context(c)
+
+    actions = np.array(actions)
+    if len(actions.shape) == 1:
+        actions = np.expand_dims(actions, 1)
+    observations = np.array(observations)
+    if len(observations.shape) == 1:
+        observations = np.expand_dims(observations, 1)
+        next_o = np.array([next_o])
+    next_observations = np.vstack(
+        (
+            observations[1:, :],
+            np.expand_dims(next_o, 0)
+        )
+    )
+    return dict(
+        observations=observations,
+        actions=actions,
+        rewards=np.array(rewards).reshape(-1, 1),
+        next_observations=next_observations,
+        terminals=np.array(terminals).reshape(-1, 1),
+        agent_infos=agent_infos,
+        env_infos=env_infos,
+        # uncertanties=-1 * uncentainty.item(),
+        # prediction_errors=prediction_errors
+    )
 
 def split_paths(paths):
     """

@@ -94,12 +94,20 @@ class PEARLAgent(nn.Module):
         self.context = None
         # reset any hidden state in the encoder network (relevant for RNN)
         #self.context_encoder.reset(num_tasks)
+    
+    def clear_context(self):
+        self.context = None
 
     def detach_z(self):
         ''' disable backprop through z '''
         self.z = self.z.detach()
         if self.recurrent:
             self.context_encoder.hidden = self.context_encoder.hidden.detach()
+
+    def set_z(self, means, vars):
+        self.z_means = means
+        self.z_vars = vars
+        self.sample_z()
 
     def update_context(self, inputs):
         ''' append single transition to the current context '''
@@ -156,7 +164,7 @@ class PEARLAgent(nn.Module):
         ''' compute q(z|c) as a function of input context and sample new z from it'''
         params = self.context_encoder(context)
         params = params.view(context.size(0), -1, self.context_encoder.output_size)
-        heterodastic_var = self.uncertainty_mlp(params).detach()
+        heterodastic_var = F.softplus(self.uncertainty_mlp(params).detach())
         if task_indices is None:
             self.task_indices = np.zeros((context.size(0),))
         elif not hasattr(task_indices, '__iter__'):

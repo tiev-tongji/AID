@@ -83,10 +83,14 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         # self.club_loss_weight                = kwargs['club_loss_weight']
         self.train_z0_policy                 = kwargs['train_z0_policy']
         self.separate_train                  = kwargs['separate_train']
-        self.pretrain                      = kwargs['pretrain']
+        self.pretrain                        = kwargs['pretrain']
 
 
-        self.heterodastic_var_thresh_2       = 0
+        self.is_onlineadapt_thres            = kwargs['is_onlineadapt_thres'] # True  return-based
+        self.is_onlineadapt_max              = kwargs['is_onlineadapt_max']   # False
+        self.r_thres                         = kwargs['r_thres']              # 0.3
+        self.onlineadapt_max_num_candidates  = kwargs['onlineadapt_max_num_candidates']
+
         self.heterodastic_var_thresh_5       = 0
         self.heterodastic_var_thresh_10      = 100
         self.heterodastic_var_thresh_20      = 100
@@ -365,14 +369,12 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             all_rets_trird = []
             for r in range(self.num_evals):
                 paths = self.collect_online_paths(idx, epoch, r, buffer)
-                paths_first = paths[0]
-                paths_second = paths[1]
-                paths_trird = paths[2]
+                paths_first, paths_second, paths_trird = paths[0:3], paths[3:6], paths[6:9]
                 # all_rets.append([eval_util.get_average_returns([p]) for p in paths])
-                all_rets_first.append([eval_util.get_average_returns([paths_first])])
-                all_rets_second.append([eval_util.get_average_returns([paths_second])])
-                all_rets_trird.append([eval_util.get_average_returns([paths_trird])])
-                all_rets.append([(eval_util.get_average_returns([paths_first]) + eval_util.get_average_returns([paths_second]) + eval_util.get_average_returns([paths_trird]))/3])
+                all_rets_first.append([eval_util.get_average_returns([p]) for p in paths_first])
+                all_rets_second.append([eval_util.get_average_returns([p]) for p in paths_second])
+                all_rets_trird.append([eval_util.get_average_returns([p]) for p in paths_trird])
+                all_rets.append([(eval_util.get_average_returns([p]) + eval_util.get_average_returns([q]) + eval_util.get_average_returns([r]))/3 for p, q, r in zip(paths_first, paths_second, paths_trird)])
             online_final_returns.append(np.mean([a[-1] for a in all_rets]))
             online_final_returns_first.append(np.mean([a[-1] for a in all_rets_first]))
             online_final_returns_second.append(np.mean([a[-1] for a in all_rets_second]))
@@ -475,6 +477,15 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
         if self.eval_statistics is None:
             self.eval_statistics = OrderedDict()
+        
+        ### prepare z of training tasks
+        self.trained_z = {}
+        self.trained_z_sample = {}
+        for idx in self.train_tasks:
+            context = self.sample_context(idx)
+            self.agent.infer_posterior(context)
+            self.trained_z[idx] = (self.agent.z_means, self.agent.z_vars)
+            self.trained_z_sample[idx] = self.agent.z
 
         ### test tasks
         eval_util.dprint('evaluating on {} test tasks'.format(len(self.eval_tasks)))
@@ -608,23 +619,71 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
         return paths
 
-    def collect_online_paths(self, idx, epoch, run, buffer):
+    def adapt_draw_one_task_from_prior(self):
+        candidates = np.random.choice(self.train_tasks, self.onlineadapt_max_num_candidates)
+        ans = -1e8
+        idx = -1
+        for can_idx in candidates:
+            task_z = self.trained_z_sample[can_idx]
+            min_dis = 1e8
+            for past_z in self.adapt_sampled_z_list:
+                dis = torch.mean((task_z - past_z) ** 2).detach().cpu().numpy()
+                min_dis = min(min_dis, dis)
+            if min_dis > ans:
+                ans = min_dis
+                idx = can_idx
+        assert idx != -1
+        return idx
+
+    def collect_online_paths(self, idx, epoch, run, buffer, num_models=12):
         self.task_idx = idx
         self.env.reset_task(idx)
 
         self.agent.clear_z()
         paths = []
         num_transitions = 0
-        for _ in range(3): # 20 / 40
-            path, num = self.sampler.obtain_samples(
-                deterministic=self.eval_deterministic,
-                max_samples=np.inf,
-                max_trajs=1,
-                accum_context=True)
-            paths += path
-            num_transitions += num
-            if num_transitions >= self.num_exp_traj_eval * self.max_path_length:
-                self.agent.infer_posterior(self.agent.context)
+        num_trajs = 0
+        self.adapt_sampled_z_list = []
+        # while num_transitions < self.num_steps_per_eval:
+        if self.algo_type == 'IDAQ':
+            for _ in range(9):
+                if num_trajs < self.num_exp_traj_eval or type(self.agent.context) == type(None): # num_exp_traj_eval = 10 ? 1 TODO
+                    sampled_idx = np.random.choice(self.train_tasks)
+                    sampled_idx = self.adapt_draw_one_task_from_prior()
+                    self.agent.clear_z()
+                    self.agent.set_z(self.trained_z[sampled_idx][0], self.trained_z[sampled_idx][1])
+                path, num = self.sampler.obtain_samples(
+                    deterministic=self.eval_deterministic,
+			        max_samples=np.inf, 
+                    max_trajs=1,
+			        accum_context=True,
+			        is_select=True,
+			        r_thres=self.r_thres,
+			        is_onlineadapt_max=self.is_onlineadapt_max,
+			        is_sparse_reward=self.sparse_rewards,
+			    	reward_models=self.reward_models[:num_models],
+                    dynamic_models=self.dynamic_models[:num_models],
+                    update_score=(num_trajs < self.num_exp_traj_eval)) # num_models = 2,4,8,12 TODO
+                paths += path
+                num_transitions += num
+                num_trajs += 1
+                if num_transitions >= self.num_exp_traj_eval * self.max_path_length and type(self.agent.context) != type(None):
+                    self.agent.infer_posterior(self.agent.context)
+        else:
+            # clear = [0,3,6]
+            clear = []
+            for i in range(9):
+                if i in clear:
+                    self.agent.clear_context()
+                path, num = self.sampler.obtain_samples(
+                    deterministic=self.eval_deterministic,
+                    max_samples=np.inf,
+                    max_trajs=1,
+                    accum_context=True)
+                paths += path
+                num_transitions += num
+                if num_transitions >= self.num_exp_traj_eval * self.max_path_length:
+                    self.agent.infer_posterior(self.agent.context)
 
         if self.sparse_rewards:
             for p in paths:
@@ -634,7 +693,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         goal = self.env._goal
         for path in paths:
             path['goal'] = goal # goal
-
+        
         return paths
 
     def epsilon_decay(self, steps):
