@@ -70,11 +70,7 @@ def experiment(gpu_id, variant, seed=None):
     obs_dim = int(np.prod(env.observation_space.shape))
     action_dim = int(np.prod(env.action_space.shape))
     reward_dim = 1
-
-    if variant['algo_type'] == 'IDAQ':
-        variant['algo_params']['train_z0_policy'] = False
-        variant['algo_params']['use_hvar'] = False
-        variant['algo_params']['z_strategy'] = 'mean'
+    
     if variant['algo_params']['separate_train'] == True and variant['algo_params']['pretrain'] == True:
         variant['algo_params']['z_strategy'] = 'mean'
 
@@ -291,7 +287,7 @@ def deep_update_dict(fr, to):
 @click.option('--seed', default="0", type=str, help="Comma-separated list of seeds.")
 @click.option('--exp_name', default=None)
 @click.option('--pretrain', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
-@click.option('--algo_type', type=click.Choice(['FOCAL', 'CSRO', 'CORRO', 'UNICORN', 'CLASSIFIER', 'CROO', 'IDAQ'], case_sensitive=False), default=None)
+@click.option('--algo_type', type=click.Choice(['FOCAL', 'CSRO', 'CORRO', 'UNICORN', 'CLASSIFIER', 'IDAQ'], case_sensitive=False), default=None)
 @click.option('--train_z0_policy', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)

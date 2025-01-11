@@ -18,6 +18,9 @@ from rlkit.envs import ENVS
 from configs.default import default_config
 import pdb
 
+import numpy as np
+np.int = int  # 动态修复 np.int 被废弃的问题
+
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
     # assume dicts have same keys
@@ -69,7 +72,7 @@ def main(config, gpu, docker, debug, eval, goal_idx=0, seed=0):
     args_list = []
     gpu_count = 2
     for task_id in range(variant['env_params']['n_tasks']):
-        gpu_id = task_id % gpu_count
+        gpu_id = task_id % gpu_count + gpu
         args_list.append([gpu_id, variant, cfg, task_id])
     # multi-processing
     p = mp.Pool(10)

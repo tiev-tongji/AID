@@ -91,11 +91,6 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.r_thres                         = kwargs['r_thres']              # 0.3
         self.onlineadapt_max_num_candidates  = kwargs['onlineadapt_max_num_candidates']
 
-        self.heterodastic_var_thresh_5       = 0
-        self.heterodastic_var_thresh_10      = 100
-        self.heterodastic_var_thresh_20      = 100
-        self.heterodastic_var_thresh_60      = 100
-
         self.eval_deterministic              = eval_deterministic
         if kwargs.get('eval_deterministic') is not None:
             eval_deterministic = kwargs.get('eval_deterministic')
@@ -120,7 +115,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self._old_table_keys        = None
         self._current_path_builder  = PathBuilder()
         self._exploration_paths     = []
-        # self.init_buffer()
+        self.init_buffer()
 
     def init_buffer(self):
         train_trj_paths = []
@@ -242,20 +237,6 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 next_obs,
                 **{'env_info': {}},
             )
-        if self.separate_train and not self.pretrain: # 分开训练的训练部分
-            train_context = ptu.from_numpy(np.concatenate([np.array(obs_train_lst), np.array(action_train_lst), np.array(reward_train_lst), np.array(next_obs_train_lst)], axis=-1))
-            train_z = self.agent.context_encoder(train_context[..., :self.agent.context_encoder.input_size])
-            train_z_var = F.softplus(self.agent.uncertainty_mlp(train_z)).detach().cpu().numpy()
-            self.heterodastic_var_thresh_2 = train_z_var.min() + 0.02 * (train_z_var.max() - train_z_var.min())
-            self.heterodastic_var_thresh_5 = train_z_var.min() + 0.05 * (train_z_var.max() - train_z_var.min())
-            self.heterodastic_var_thresh_10 = train_z_var.min() + 0.1 * (train_z_var.max() - train_z_var.min())
-            self.heterodastic_var_thresh_20 = train_z_var.min() + 0.2 * (train_z_var.max() - train_z_var.min())
-            self.heterodastic_var_thresh_60 = train_z_var.min() + 0.6 * (train_z_var.max() - train_z_var.min())
-            print(f"最小值：{train_z_var.min()}")
-            print(f"最大值：{train_z_var.max()}")
-            print(f'5%分位数: {self.heterodastic_var_thresh_5}')
-            print(f'20%分位数: {self.heterodastic_var_thresh_20}')
-            print(f"60%分位数: {self.heterodastic_var_thresh_60}")
 
     def _try_to_eval(self, epoch):
         if self._can_evaluate():
@@ -369,12 +350,12 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             all_rets_trird = []
             for r in range(self.num_evals):
                 paths = self.collect_online_paths(idx, epoch, r, buffer)
-                paths_first, paths_second, paths_trird = paths[0:3], paths[3:6], paths[6:9]
+                paths_first, paths_second, paths_trird = paths[0], paths[1], paths[2]
                 # all_rets.append([eval_util.get_average_returns([p]) for p in paths])
-                all_rets_first.append([eval_util.get_average_returns([p]) for p in paths_first])
-                all_rets_second.append([eval_util.get_average_returns([p]) for p in paths_second])
-                all_rets_trird.append([eval_util.get_average_returns([p]) for p in paths_trird])
-                all_rets.append([(eval_util.get_average_returns([p]) + eval_util.get_average_returns([q]) + eval_util.get_average_returns([r]))/3 for p, q, r in zip(paths_first, paths_second, paths_trird)])
+                all_rets_first.append([eval_util.get_average_returns([paths_first])])
+                all_rets_second.append([eval_util.get_average_returns([paths_second])])
+                all_rets_trird.append([eval_util.get_average_returns([paths_trird])])
+                all_rets.append([(eval_util.get_average_returns([paths_first]) + eval_util.get_average_returns([paths_second]) + eval_util.get_average_returns([paths_trird]))/3])
             online_final_returns.append(np.mean([a[-1] for a in all_rets]))
             online_final_returns_first.append(np.mean([a[-1] for a in all_rets_first]))
             online_final_returns_second.append(np.mean([a[-1] for a in all_rets_second]))
@@ -646,7 +627,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.adapt_sampled_z_list = []
         # while num_transitions < self.num_steps_per_eval:
         if self.algo_type == 'IDAQ':
-            for _ in range(9):
+            for _ in range(3):
                 if num_trajs < self.num_exp_traj_eval or type(self.agent.context) == type(None): # num_exp_traj_eval = 10 ? 1 TODO
                     sampled_idx = np.random.choice(self.train_tasks)
                     sampled_idx = self.adapt_draw_one_task_from_prior()
@@ -663,16 +644,15 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 			        is_sparse_reward=self.sparse_rewards,
 			    	reward_models=self.reward_models[:num_models],
                     dynamic_models=self.dynamic_models[:num_models],
-                    update_score=(num_trajs < self.num_exp_traj_eval)) # num_models = 2,4,8,12 TODO
+                    update_score=(num_trajs < self.num_exp_traj_eval))
                 paths += path
                 num_transitions += num
                 num_trajs += 1
                 if num_transitions >= self.num_exp_traj_eval * self.max_path_length and type(self.agent.context) != type(None):
                     self.agent.infer_posterior(self.agent.context)
         else:
-            # clear = [0,3,6]
             clear = []
-            for i in range(9):
+            for i in range(3):
                 if i in clear:
                     self.agent.clear_context()
                 path, num = self.sampler.obtain_samples(
@@ -682,7 +662,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                     accum_context=True)
                 paths += path
                 num_transitions += num
-                if num_transitions >= self.num_exp_traj_eval * self.max_path_length:
+                if num_transitions >= self.num_exp_traj_eval * self.max_path_length and type(self.agent.context) != type(None):
                     self.agent.infer_posterior(self.agent.context)
 
         if self.sparse_rewards:

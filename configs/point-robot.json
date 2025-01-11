@@ -23,7 +23,7 @@
         "discount": 0.90,
         "reward_scale": 100.0,
         "sparse_rewards": 0,
-        "num_exp_traj_eval": 3,
+        "num_exp_traj_eval": 1,
         "dump_eval_paths": 0,
         "train_epoch": [
             200,
@@ -44,7 +44,7 @@
         "FOCAL": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_z0_no_pose_hvar_pre/seed1/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_baseline_pre/seed0/agent.pth"
         },
         "CSRO": {
             "use_focal_loss": true,
@@ -80,7 +80,7 @@
         "IDAQ": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_baseline_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_z0_no_pose_hvar_pre/seed0/agent.pth"
         }
     },
     "util_params": {
@@ -88,5 +88,5 @@
         "debug": false,
         "exp_name": "CSRO"
     },
-    "algo_type": "FOCAL"
+    "algo_type": "CLASSIFIER"
 }

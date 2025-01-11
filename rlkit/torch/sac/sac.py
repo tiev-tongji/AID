@@ -185,7 +185,6 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         self._num_steps                     = 0
         self._visit_num_steps_train         = 10
         self._alpha_var                     = torch.tensor(1.)
-        self.init_buffer()
 
     ###### Torch stuff #####
     @property
@@ -798,7 +797,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             transition_heterodastic_var_flat = transition_heterodastic_var.view(self.batch_size * len(indices), -1)
             var0 = ptu.zeros_like(transition_heterodastic_var_flat)
             transition_heterodastic_var_flat = torch.cat([var0, transition_heterodastic_var_flat], dim=0)
-            q_target = rewards + (1. - terms) * self.discount * target_v_values - self.hvar_punish_w*transition_heterodastic_var_flat
+            q_target = rewards + (1. - terms) * self.discount * target_v_values - self.hvar_punish_w * transition_heterodastic_var_flat
         else:
             q_target = rewards + (1. - terms) * self.discount * target_v_values
 
