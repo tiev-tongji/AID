@@ -15,6 +15,10 @@ from itertools import product
 import sys
 from tensorboardX import SummaryWriter
 
+import numpy as np
+np.int = int  # 动态修复 np.int 被废弃的问题
+
+
 mujoco_version = '200'  # 默认版本
 if '--mujoco_version' in sys.argv:
     idx = sys.argv.index('--mujoco_version')
@@ -23,8 +27,8 @@ if '--mujoco_version' in sys.argv:
 
 # 设置 MuJoCo 环境变量
 if mujoco_version == '131':
-    os.environ['MUJOCO_PY_MJPRO_PATH'] = '/home/autolab/.mujoco/mujoco131'
-    os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:/home/autolab/.mujoco/mujoco131/bin:/usr/lib/nvidia"
+        os.environ['MUJOCO_PY_MJPRO_PATH'] = os.path.expanduser('~/.mujoco/mjpro131')
+        os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:{os.path.expanduser('~/.mujoco/mjpro131/bin')}:/usr/lib/nvidia"
 elif mujoco_version == '200':
     os.environ['MUJOCO_PY_MJPRO_PATH'] = '/home/autolab/.mujoco/mujoco200'
     os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:/home/autolab/.mujoco/mujoco200/bin:/usr/lib/nvidia"

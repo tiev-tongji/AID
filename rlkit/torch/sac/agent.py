@@ -181,9 +181,9 @@ class PEARLAgent(nn.Module):
         self.z_mins = params[batch_indices, min_index]
 
         # z_havar_weighted 
-        # softmax(e^-x)  ：weighted_e^-x
-        # heterodastic_var = torch.abs(heterodastic_var - 2.4)
-        weights = F.softmax(1 / torch.exp(heterodastic_var), dim=1)
+        # softmax(e^-x)
+        # weights = F.softmax(torch.exp(-heterodastic_var), dim=1)
+        weights = F.softmax(-heterodastic_var, dim=1)
         self.z_weighted = torch.sum(weights * params, dim=1) # [task, latent_dim]
         # 1 - softmax    ：weighted_1-softmax
         # weights = 1 - F.softmax(heterodastic_var, dim=1)

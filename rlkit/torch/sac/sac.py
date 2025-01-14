@@ -128,6 +128,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         self.l2_reg_criterion               = nn.MSELoss()
         self.club_criterion                 = nn.MSELoss()
         self.pred_loss                      = nn.MSELoss()
+        self.hvar_loss                      = nn.MSELoss()
         self.cross_entropy_loss             = nn.CrossEntropyLoss()
 
         self.qf1, self.qf2, _, _, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models = nets[1:]
@@ -547,6 +548,12 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         heteroscedastic_var = torch.mean(F.softplus(self.agent.uncertainty_mlp(latent_z.detach())))
         # heteroscedastic_var = torch.mean(F.softplus(self.agent.uncertainty_mlp(latent_z)))
         heteroscedastic_loss = max(1e-4, loss)/(2 * heteroscedastic_var) + torch.log(heteroscedastic_var**0.5)
+        return heteroscedastic_loss, heteroscedastic_var
+    
+    def HeteroscedasticLoss2(self, context, loss):
+        latent_z = self.agent.encode_no_mean(context).view(-1, self.latent_dim)
+        heteroscedastic_var = torch.mean(F.softplus(self.agent.uncertainty_mlp(latent_z.detach())))
+        heteroscedastic_loss = self.hvar(loss, heteroscedastic_var)
         return heteroscedastic_loss, heteroscedastic_var
 
     def _take_step(self, indices, context):
