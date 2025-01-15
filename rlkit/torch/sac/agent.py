@@ -203,6 +203,8 @@ class PEARLAgent(nn.Module):
 
         self.z_vars = torch.std(params, dim=1)
         self.sample_z()
+        
+        return heterodastic_var
 
     def encode_no_mean(self, context):
         params = self.context_encoder(context)

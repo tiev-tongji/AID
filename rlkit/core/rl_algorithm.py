@@ -5,6 +5,7 @@ import os
 import glob
 import gtimer as gt
 import numpy as np
+import random
 
 from rlkit.core import logger, eval_util
 from rlkit.data_management.env_replay_buffer import MultiTaskReplayBuffer
@@ -536,13 +537,14 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             logger.record_tabular(key, value)
         self.eval_statistics = None
 
-        if self.separate_train and not self.pretrain:
-            return
-
         if self.plotter:
             self.plotter.draw()
         # Plot T-SNE at the end of training
         if epoch == (self.num_iterations - 1):
+            if self.separate_train and not self.pretrain:
+                if 'point-robot' in self.env_name:
+                    self.draw_path(epoch, logger._snapshot_dir)
+                return
             print('---------T-SNE: Collecting Zs----------')
             # sample offline context zs
             fig_save_dir = logger._snapshot_dir + '/figures'
@@ -570,6 +572,89 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_zs_{epoch}.png', zs=[online_test_zs], subplot_title_lst=[f'online_test_zs_{epoch}'])
             self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_np_zs_{epoch}.png', zs=[online_train_np_zs], subplot_title_lst=[f'online_train_np_zs_{epoch}'])
             self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_np_zs_{epoch}.png', zs=[online_test_np_zs], subplot_title_lst=[f'online_test_np_zs_{epoch}'])
+
+    def draw_path(self, epoch, logdir):
+        idx = random.choice(self.eval_tasks)
+        paths, heterodastic_vars = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
+
+        fig = plt.figure(figsize=(12, 9))
+        ax = plt.gca()
+
+        # half_circle = plt.Circle((0, 0), 1, color=(180./255., 180./255., 180./255.), fill=False, linestyle='-', linewidth=1)
+        # 画半圆（只画上半部分，起始角度 0° 到 180°）
+        import matplotlib.patches as patches
+        half_circle = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=1)
+        ax.add_artist(half_circle)
+
+        ax.set_xlim(-1.1, 1.1)  # x 轴范围 [-1, 1]
+        ax.set_ylim(-0.2, 1.2)   # y 轴范围 [0, 1]
+        ax.set_aspect('equal', 'box')
+
+        markers = ['^', 's', 'o', 'x', 'D', '*']  # 三角形、方块、圆点、叉叉、菱形、星号
+        colors = [(234./255., 226./255., 254./255.), (121./255., 187./255., 216./255.), (0.6, 0.7, 0.9)]
+        linestyles = ['-', '--', '-.']
+        lines_for_legend = []  # 存储用于显示在图例中的线条
+        save_data = []
+        for i, path in enumerate(paths[:2]):
+            observations = np.array(path['observations'])
+            heterodastic_var = np.array(heterodastic_vars[i])
+            line, = plt.plot(observations[:, 0], observations[:, 1], color=colors[i % len(colors)], linestyle=linestyles[i % len(linestyles)], label=f'Trajectory Line {i + 1}', linewidth=2, zorder=1)
+            sc = plt.scatter(observations[:, 0], observations[:, 1], c=heterodastic_var, cmap='coolwarm', marker=markers[i % len(markers)], label=f'Trajectory {i + 1}', zorder=2)
+            save_data.append({
+                'observations': observations.tolist(),
+                'heterodastic_var': heterodastic_var.tolist(),
+                'goal': path['goal']
+            })
+            lines_for_legend.append(line)
+
+        goal = path['goal']
+        plt.axis('off')
+        goal_point = plt.scatter(
+            goal[0], goal[1],
+            edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
+            facecolors='none',           # 空心
+            marker='*',
+            label='Start',
+            s=200,                       # 控制圆圈的大小，增大半径
+            linewidths=2,                # 设置边框线宽
+            zorder=3                     # 控制绘制顺序
+        )
+        lines_for_legend.append(goal_point)
+
+        start = (0.,0.)
+        start_point = plt.scatter(
+            start[0], start[1],
+            edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
+            facecolors='none',
+            marker='o',
+            label='Goal',
+            s=150,                       # 控制圆圈的大小，增大半径
+            linewidths=2,                # 设置边框线宽
+            zorder=3                     # 控制绘制顺序
+        )
+        lines_for_legend.append(start_point)
+
+        cbar = plt.colorbar(sc, label='Uncertainty', fraction=0.05, pad=0.04, shrink=0.7, aspect=20)
+        cbar.ax.tick_params(labelsize=12)  # 调整 colorbar 标签字体大小
+        plt.title('Trajectories and Goals from online_dataset/point-robot', pad=20, fontsize=20)
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        # plt.legend(loc='upper right')
+        plt.legend(handles=lines_for_legend, loc='upper right', fontsize=12)
+
+        fig_save_dir = logdir + '/figures'
+        if not os.path.exists(fig_save_dir):
+            os.makedirs(fig_save_dir)
+        plt.savefig(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}.png', dpi=400)
+        plt.close()
+        
+        with open(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}.txt', 'w') as f:
+            for i, data in enumerate(save_data):
+                f.write(f'Trajectory {i + 1}:\n')
+                f.write(f'Observations:\n{data["observations"]}\n')
+                f.write(f'Uncertainty:\n{data["heterodastic_var"]}\n')
+                f.write(f'Goal:\n{data["goal"]}\n\n')
+
 
     def collect_offline_paths(self, idx, epoch, run, buffer):
         self.task_idx = idx
@@ -616,7 +701,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         assert idx != -1
         return idx
 
-    def collect_online_paths(self, idx, epoch, run, buffer, num_models=12):
+    def collect_online_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False):
         self.task_idx = idx
         self.env.reset_task(idx)
 
@@ -648,8 +733,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 paths += path
                 num_transitions += num
                 num_trajs += 1
-                if num_transitions >= self.num_exp_traj_eval * self.max_path_length and type(self.agent.context) != type(None):
-                    self.agent.infer_posterior(self.agent.context)
+                if num_transitions >= self.num_exp_traj_eval * self.max_path_length and self.agent.context is not None:
+                    heterodastic_var = self.agent.infer_posterior(self.agent.context).cpu().numpy().unsqueeze(0)
         else:
             clear = []
             for i in range(3):
@@ -662,8 +747,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                     accum_context=True)
                 paths += path
                 num_transitions += num
-                if num_transitions >= self.num_exp_traj_eval * self.max_path_length and type(self.agent.context) != type(None):
-                    self.agent.infer_posterior(self.agent.context)
+                # if num_transitions >= self.num_exp_traj_eval * self.max_path_length and self.agent.context is not None:
+                heterodastic_var = self.agent.infer_posterior(self.agent.context).squeeze().cpu().numpy()
 
         if self.sparse_rewards:
             for p in paths:
@@ -674,7 +759,11 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         for path in paths:
             path['goal'] = goal # goal
         
-        return paths
+        if return_heterodastic_var:
+            heterodastic_var_list = np.array_split(heterodastic_var, 3)
+            return paths, heterodastic_var_list
+        else:
+            return paths
 
     def epsilon_decay(self, steps):
         if steps < self.num_steps_per_eval*0.5:

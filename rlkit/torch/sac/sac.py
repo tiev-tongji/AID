@@ -46,6 +46,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         )
 
         ## 基本配置
+        self.env_name                       = kwargs['env_name']
         self.algo_type                      = algo_type
         self.latent_dim                     = latent_dim
         self.separate_train                 = kwargs['separate_train']
@@ -191,9 +192,9 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
     @property
     def networks(self):
         if self.policy_update_strategy == 'BRAC':
-            return self.agent.networks + [self.qf1, self.qf2, self.vf, self.target_vf, self.c, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models]
+            return self.agent.networks + [self.qf1, self.qf2, self.vf, self.target_vf, self.c, self.club_model, self.context_decoder, self.classifier]
         elif self.policy_update_strategy == 'TD3BC':
-            return self.agent.networks + [self.qf1, self.qf2, self.target_qf1, self.target_qf2, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models]
+            return self.agent.networks + [self.qf1, self.qf2, self.target_qf1, self.target_qf2, self.club_model, self.context_decoder, self.classifier]
 
     @property
     def get_alpha(self):
@@ -201,8 +202,22 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             self._alpha_var, 0.0, self.alpha_max)
 
     def training_mode(self, mode):
-        for net in self.networks:
-            net.train(mode)
+        if not self.separate_train or mode is False:
+            for net in self.networks:
+                net.train(mode)
+        elif self.separate_train and self.pretrain:
+            self.club_model.train(mode)
+            self.context_decoder.train(mode)
+            self.classifier.train(mode)
+            self.agent.uncertainty_mlp.train(mode)
+        elif self.separate_train and not self.pretrain:
+            for net in self.networks:
+                net.train(mode)
+            self.club_model.eval()
+            self.context_decoder.eval()
+            self.classifier.eval()
+            self.agent.uncertainty_mlp.eval()
+            
 
     def to(self, device=None):
         if device == None:
@@ -560,7 +575,10 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         # ---------------------------------------------------------
         # Update context encoder, heterodastic net, classifier net, behavior encoder and club model
         # ---------------------------------------------------------
-        self._update_context_encoder(indices, context)
+        if self.separate_train and not self.pretrain:
+            pass
+        else:
+            self._update_context_encoder(indices, context)
 
         # ---------------------------------------------------------
         # Update policy and qf networks
@@ -597,7 +615,8 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             print(len(self.loss.items()))
             if self.loss.get("heteroscedastic_var") is not None:
                 self.eval_statistics['Heteroscedastic Var'] = self.loss["heteroscedastic_var"]
-            self.eval_statistics['Heteroscedastic Loss'] = self.loss["heteroscedastic_loss"]
+            if self.loss.get("heteroscedastic_loss") is not None:
+                self.eval_statistics['Heteroscedastic Loss'] = self.loss["heteroscedastic_loss"]
             if self.loss.get("focal_loss") is not None:
                 self.eval_statistics['FOCAL Loss'] = self.loss["focal_loss"]
             if self.loss.get("classify_loss") is not None:
@@ -606,7 +625,6 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
                 self.eval_statistics['CLUB Loss'] = self.loss["club_loss"]
             if self.loss.get("croo_loss") is not None:
                 self.eval_statistics['CROO Loss'] = self.loss["croo_loss"]
-                # self.eval_statistics['Neg Recon Loss'] = self.loss["neg_recon_loss"]
             if self.loss.get("recon_loss") is not None:
                 self.eval_statistics['Recon Loss'] = self.loss["recon_loss"]
             if self.loss.get("infoNCE_loss") is not None:
@@ -638,21 +656,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
     def _update_context_encoder(self, indices, context):
         """
         更新上下文编码器、异方差网络和分类器等
-        """        
-        # # update behavor encoder
-        # if self.use_croo_loss:
-        #     self.behavior_encoder_optimizer.zero_grad()
-        #     z_target = self.agent.encode_no_mean(context).detach()
-        #     z_param = self.behavior_encoder(context[...,:self.behavior_encoder.input_size])
-        #     z_mean = z_param[..., :self.latent_dim]
-        #     z_var = F.softplus(z_param[..., self.latent_dim:])
-        #     behavior_encoder_loss = self.club_model_loss_weight * ((z_target - z_mean)**2/(2*z_var) + torch.log(torch.sqrt(z_var))).mean()
-        #     behavior_encoder_loss.backward()
-        #     self.loss["behavior_encoder_loss"] = behavior_encoder_loss.item()
-        #     if self.separate_train and not self.pretrain:
-        #         pass
-        #     else:
-        #         self.behavior_encoder_optimizer.step()
+        """
 
         # update club model
         if self.use_club_loss or self.use_croo_loss:

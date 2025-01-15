@@ -45,3 +45,6 @@ Experiments are configured via `json` configuration files located in `./configs`
 CUDA_VISIBLE_DEVICES=0 python launch_experiment.py ./configs/[ENV].json --seed 0
 ```
 Output files will be written to `./output/[ENV]/[EXP NAME]/seed[seed]` where the experiment name corresponds to the process starting time. The file `progress.csv` contains statistics logged over the course of training. We recommend `viskit` for visualizing learning curves: https://github.com/vitchyr/viskit. Network weights are also snapshotted during training.
+
+## 
+python show_path.py configs/point-robot.json --gpu 0 --seed 1 --exp_name classifier_mix_z0_hvar_weighted-x --algo_type CLASSIFIER --train_z0_policy true --use_hvar true --z_strategy weighted
