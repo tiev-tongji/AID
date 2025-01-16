@@ -477,21 +477,19 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         probs = -(r_ns-pre_r_ns_mean)**2/(pre_r_ns_var+epsilon) - torch.log(pre_r_ns_var**0.5+epsilon)
         return -torch.mean(probs)
 
-    def FOCAL_z_loss(self, indices, context, b, epsilon=1e-3):
-        latent_z = self.agent.encode_no_mean(context).view(-1, self.latent_dim)
+    def FOCAL_z_loss(self, indices, context, epsilon=1e-3):
+        latent_z = self.agent.encode_no_mean(context).mean(dim=1)
         pos_z_loss = 0.
         neg_z_loss = 0.
         pos_cnt = 0
         neg_cnt = 0
         for i in range(len(indices)):
-            idx_i = i * b # index in task * batch dim
             for j in range(i+1, len(indices)):
-                idx_j = j * b # index in task * batch dim
                 if indices[i] == indices[j]:
-                    pos_z_loss += torch.sqrt(torch.mean((latent_z[idx_i] - latent_z[idx_j]) ** 2) + epsilon)
+                    pos_z_loss += torch.sqrt(torch.mean((latent_z[i] - latent_z[j]) ** 2) + epsilon)
                     pos_cnt += 1
                 else:
-                    neg_z_loss += 1/(torch.mean((latent_z[idx_i] - latent_z[idx_j]) ** 2) + epsilon * 100)
+                    neg_z_loss += 1/(torch.mean((latent_z[i] - latent_z[j]) ** 2) + epsilon * 100)
                     neg_cnt += 1
         focal_z_loss = pos_z_loss/(pos_cnt + epsilon) +  neg_z_loss/(neg_cnt + epsilon)
         return focal_z_loss
@@ -686,7 +684,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             self.loss["club_loss"] = club_loss.item()
             total_loss += self.club_loss_weight * club_loss
         if self.use_focal_loss:
-            focal_z_loss = self.FOCAL_z_loss(indices, context, self.batch_size)
+            focal_z_loss = self.FOCAL_z_loss(indices, context)
             self.loss["focal_loss"] = focal_z_loss.item()
             total_loss += self.focal_loss_weight * focal_z_loss
         if self.use_recon_loss:
