@@ -574,7 +574,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         ax.set_aspect('equal', 'box')
 
         markers = ['^', 's', 'o', 'x', 'D', '*']  # 三角形、方块、圆点、叉叉、菱形、星号
-        colors = [(234./255., 226./255., 254./255.), (121./255., 187./255., 216./255.), (0.6, 0.7, 0.9)]
+        colors = [(234./255., 226./255., 254./255.), (121./255., 187./255., 216./255.)]
         linestyles = ['-', '--', '-.']
         lines_for_legend = []  # 存储用于显示在图例中的线条
         save_data = []
@@ -744,7 +744,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             path['goal'] = goal # goal
         
         if return_heterodastic_var:
-            heterodastic_var_list = np.array_split(heterodastic_var, 3)
+            heterodastic_var_list = np.array_split(heterodastic_var, 2)
             return paths, heterodastic_var_list
         else:
             return paths
