@@ -527,6 +527,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             if self.separate_train and not self.pretrain:
                 if 'point-robot' in self.env_name:
                     self.draw_path(epoch, logger._snapshot_dir)
+            if self.seed != 0:
                 return
             print('---------T-SNE: Collecting Zs----------')
             # sample offline context zs
@@ -597,7 +598,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
             facecolors='none',           # 空心
             marker='*',
-            label='Start',
+            label='Goal',
             s=200,                       # 控制圆圈的大小，增大半径
             linewidths=2,                # 设置边框线宽
             zorder=3                     # 控制绘制顺序
@@ -610,7 +611,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
             facecolors='none',
             marker='o',
-            label='Goal',
+            label='Start',
             s=150,                       # 控制圆圈的大小，增大半径
             linewidths=2,                # 设置边框线宽
             zorder=3                     # 控制绘制顺序

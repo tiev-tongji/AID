@@ -46,6 +46,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         )
 
         ## 基本配置
+        self.seed                           = seed
         self.env_name                       = kwargs['env_name']
         self.algo_type                      = algo_type
         self.latent_dim                     = latent_dim
@@ -210,6 +211,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             self.context_decoder.train(mode)
             self.classifier.train(mode)
             self.agent.uncertainty_mlp.train(mode)
+            self.agent.context_encoder.train(mode)
         elif self.separate_train and not self.pretrain:
             for net in self.networks:
                 net.train(mode)
@@ -217,7 +219,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             self.context_decoder.eval()
             self.classifier.eval()
             self.agent.uncertainty_mlp.eval()
-            
+            self.agent.context_encoder.eval()
 
     def to(self, device=None):
         if device == None:
