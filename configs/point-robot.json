@@ -42,9 +42,10 @@
         "use_brac": 0,
         "allow_backward_z": false,
         "FOCAL": {
+            "hvar_punish_w": 10,
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_z0_no_pose_hvar_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_baseline_pre"
         },
         "CSRO": {
             "use_focal_loss": true,
@@ -52,25 +53,33 @@
             "focal_loss_weight": 1.0,
             "club_loss_weight": 25,
             "club_model_loss_weight": 10,
-            "pretrained_agent_path": "logs/point-robot/pre/csro_mix_z0_hvar_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/csro_mix_z0_hvar_pre"
         },
         "CORRO": {
             "use_infoNCE_loss": true,
             "infoNCE_loss_weight": 1.0,
             "infoNCE_temp": 0.1,
-            "pretrained_agent_path": "logs/point-robot/pre/corro_mix_z0_hvar_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/corro_mix_z0_hvar_pre"
         },
         "UNICORN": {
+            "hvar_punish_w": 2,
             "use_focal_loss": true,
             "use_recon_loss": true,
             "focal_loss_weight": 0.5,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/pre/unicorn_mix_z0_hvar0.5_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/unicorn_mix_z0_baseline_recon2_pre"
+        },
+        "RECON": {
+            "hvar_punish_w": 100,
+            "use_recon_loss": true,
+            "recon_loss_weight": 1.0,
+            "pretrained_agent_path": "logs/point-robot/pre/recon_mix_baseline_pre"
         },
         "CLASSIFIER": {
+            "hvar_punish_w": 10,
             "use_classify_loss": true,
             "classify_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/pre/classifier_mix_z0_hvar_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/classifier_mix_baseline_pre"
         },
         "CROO": {
             "use_croo_loss": true,
@@ -80,7 +89,7 @@
         "IDAQ": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_z0_no_pose_hvar_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/point-robot/pre/focal_mix_baseline_pre"
         }
     },
     "util_params": {
@@ -88,5 +97,5 @@
         "debug": false,
         "exp_name": "CSRO"
     },
-    "algo_type": "CLASSIFIER"
+    "algo_type": "FOCAL"
 }

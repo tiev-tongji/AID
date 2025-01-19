@@ -23,7 +23,7 @@
         "discount": 0.99,
         "reward_scale": 5,
         "sparse_rewards": 0,
-        "num_exp_traj_eval": 2,
+        "num_exp_traj_eval": 1,
         "dump_eval_paths": 0,
         "train_epoch": [
             100000,
@@ -44,6 +44,7 @@
         "alpha_max": 2e3,
         "allow_backward_z": false,
         "FOCAL": {
+            "hvar_punish_w": 2,
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
             "pretrained_agent_path": "logs/cheetah-vel/pre/focal_mix_z0_hvar_pre/"
@@ -54,22 +55,29 @@
             "focal_loss_weight": 1.0,
             "club_loss_weight": 10,
             "club_model_loss_weight": 10,
-            "pretrained_agent_path": "logs/cheetah-vel/pre/csro_mix_z0_hvar_pre/seed0/agent.pth"
+            "pretrained_agent_path": ""
         },
         "CORRO": {
             "use_infoNCE_loss": true,
             "infoNCE_loss_weight": 1.0,
             "infoNCE_temp": 0.1,
-            "pretrained_agent_path": "logs/cheetah-vel/pre/corro_mix_z0_hvar_pre/seed0/agent.pth"
+            "pretrained_agent_path": ""
         },
         "UNICORN": {
             "use_focal_loss": true,
             "use_recon_loss": true,
             "focal_loss_weight": 0.5,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/cheetah-vel/pre/unicorn_mix_z0_hvar0.5_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/cheetah-vel/pre/unicorn_mix_baseline0.5_pre"
+        },
+        "RECON": {
+            "hvar_punish_w": 100,
+            "use_recon_loss": true,
+            "recon_loss_weight": 1.0,
+            "pretrained_agent_path": "logs/point-robot/pre/recon_mix_baseline_pre"
         },
         "CLASSIFIER": {
+            "hvar_punish_w": 10,
             "use_classify_loss": true,
             "classify_loss_weight": 1.0,
             "pretrained_agent_path": "logs/cheetah-vel/pre/classifier_mix_z0_hvar_pre"
@@ -77,7 +85,7 @@
         "CROO": {
             "use_croo_loss": true,
             "croo_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/cheetah-vel/"
+            "pretrained_agent_path": ""
         },
         "IDAQ": {
             "use_focal_loss": true,

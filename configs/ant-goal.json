@@ -23,7 +23,7 @@
         "discount": 0.99,
         "reward_scale": 5,
         "sparse_rewards": 0,
-        "num_exp_traj_eval": 2,
+        "num_exp_traj_eval": 1,
         "dump_eval_paths": 0,
         "train_epoch": [
             100000,
@@ -43,9 +43,10 @@
         "alpha_init": 5e2,
         "alpha_max": 2e3,
         "FOCAL": {
+            "hvar_punish_w": 2,
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-dir/pre/focal_mix_z0_hvar_pre"
+            "pretrained_agent_path": "logs/ant-goal/pre/focal_mix_z0_hvar_pre"
         },
         "CSRO": {
             "use_focal_loss": true,
@@ -53,35 +54,35 @@
             "focal_loss_weight": 1.0,
             "club_loss_weight": 50,
             "club_model_loss_weight": 10,
-            "pretrained_agent_path": "logs/ant-dir/pre/csro_mix_z0_hvar_pre"
+            "pretrained_agent_path": "logs/ant-goal/pre/csro_mix_z0_hvar_pre"
         },
         "CORRO": {
             "use_infoNCE_loss": true,
             "infoNCE_loss_weight": 1.0,
             "infoNCE_temp": 0.1,
-            "pretrained_agent_path": "logs/ant-dir/pre/corro_mix_z0_hvar_pre"
+            "pretrained_agent_path": "logs/ant-goal/pre/corro_mix_z0_hvar_pre"
         },
         "UNICORN": {
             "use_focal_loss": true,
             "use_recon_loss": true,
             "focal_loss_weight": 0.1,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-dir/pre/unicorn_mix_z0_hvar0.5_pre"
+            "pretrained_agent_path": "logs/ant-goal/pre/unicorn_mix_z0_hvar0.5_pre"
         },
         "CLASSIFIER": {
             "use_classify_loss": true,
             "classify_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-dir/classifier_mix_z0_hvar"
+            "pretrained_agent_path": "logs/ant-goal/pre/classifier_mix_baseline_pre"
         },
         "CROO": {
             "use_croo_loss": true,
             "croo_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-dir/"
+            "pretrained_agent_path": "logs/ant-goal/"
         },
         "IDAQ": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-dir/pre/focal_mix_z0_no_pose_hvar_pre"
+            "pretrained_agent_path": "logs/ant-goal/pre/focal_mix_z0_no_pose_hvar_pre"
         }
     },
     "util_params": {

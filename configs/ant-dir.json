@@ -23,7 +23,7 @@
         "discount": 0.99,
         "reward_scale": 5,
         "sparse_rewards": 0,
-        "num_exp_traj_eval": 2,
+        "num_exp_traj_eval": 1,
         "dump_eval_paths": 0,
         "train_epoch": [
             100000,
@@ -72,7 +72,7 @@
         "CLASSIFIER": {
             "use_classify_loss": true,
             "classify_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-dir/classifier_mix_z0_hvar"
+            "pretrained_agent_path": "logs/ant-dir/pre/classifier_mix_z0_hvar_pre"
         },
         "CROO": {
             "use_croo_loss": true,
@@ -82,7 +82,7 @@
         "IDAQ": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-dir/pre/focal_mix_z0_no_pose_hvar_pre/seed0/agent.pth"
+            "pretrained_agent_path": "logs/ant-dir/pre/focal_mix_z0_no_pose_hvar_pre"
         }
     },
     "util_params": {
@@ -90,5 +90,5 @@
         "debug": false,
         "exp_name": "CSRO"
     },
-    "algo_type": "CLASSIFIER"
+    "algo_type": "FOCAL"
 }

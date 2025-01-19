@@ -73,7 +73,7 @@ def plot_tensorboard_data(all_seed_data_dict, tags, plot_type='mean_std', save_p
     if len(tags) == 6:
         fig, axes = plt.subplots(2, 3, figsize=(15, 10))
     elif len(tags) == 4:
-        fig, axes = plt.subplots(1, 4, figsize=(15, 8))
+        fig, axes = plt.subplots(1, 4, figsize=(18, 8))
     fig.suptitle(save_path.split('.')[0])
     
     if len(tags) == 1:
@@ -120,8 +120,12 @@ def visualize_tensorboard(base_dirs, tags=['tag1', 'tag2'], plot_type='mean_std'
     plot_tensorboard_data(all_seed_data_dict, tags, plot_type, save_path)
 
 if __name__ == '__main__':
-    base_dirs = ['logs/point-robot/classifier_mix_baseline_', 'logs/point-robot/classifier_mix_z0_hvar_weighted-x_']
-    # base_dirs = ['logs/cheetah-vel/focal_mix_baseline', 'logs/cheetah-vel/focal_mix_z0_hvar_weighted']
+    # base_dirs = ['logs/cheetah-vel/classifier_mix_baseline', 'logs/cheetah-vel/classifier_mix_z0_hvar_weighted']
+    base_dirs = ['logs/cheetah-vel/focal_mix_baseline', 'logs/cheetah-vel/focal_mix_z0_hvar_weighted']
+    # base_dirs = ['logs/cheetah-vel/focal_mix_z0_hvar_mean', 'logs/cheetah-vel/focal_mix_z0_hvar_min', 'logs/cheetah-vel/focal_mix_z0_hvar_weighted'] # 消融实验 mean min
+    # base_dirs = ['logs/cheetah-vel/focal_mix_z0_hvar_mean', 'logs/cheetah-vel/focal_mix_z0_hvar_weighted'] # 消融实验 mean
+    # base_dirs = ['logs/cheetah-vel/focal_mix_z0_hvar_mean', 'logs/cheetah-vel/focal_mix_z0_hvar_weighted'] # 消融实验 mean
+    # base_dirs = ['logs/point-robot/idaq_mix_baseline', 'logs/point-robot/focal_mix_z0_hvar_weighted'] # IDAQ
     tags = [
         # 'Return/Average_OfflineReturn_all_test_tasks', 'Return/Average_OfflineReturn_all_train_tasks',
             'Return/first_OnlineReturn_all_test_tasks', 'Return/first_OnlineReturn_all_train_tasks',

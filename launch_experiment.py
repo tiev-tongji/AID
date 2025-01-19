@@ -75,7 +75,7 @@ def experiment(gpu_id, variant, seed=None):
     action_dim = int(np.prod(env.action_space.shape))
     reward_dim = 1
     
-    if variant['algo_params']['separate_train'] == True and variant['algo_params']['pretrain'] == True:
+    if variant['algo_params']['separate_train'] == True and variant['algo_params']['pretrain'] == True and variant['env_name'] != 'ant-goal':
         variant['algo_params']['z_strategy'] = 'mean'
         variant['algo_params']['num_iterations'] = 60
 
@@ -121,7 +121,7 @@ def experiment(gpu_id, variant, seed=None):
     context_decoder = MlpDecoder(
         hidden_sizes=[200, 200, 200],
         input_size=latent_dim+obs_dim+action_dim,
-        output_size=2*(reward_dim+obs_dim) if variant['algo_params']['use_next_obs_in_context'] else 2*reward_dim,
+        output_size=(reward_dim+obs_dim) if variant['algo_params']['use_next_obs_in_context'] else reward_dim,
         layer_norm=variant['algo_params']['layer_norm'] if 'layer_norm' in variant['algo_params'].keys() else False
     )
     
@@ -293,7 +293,7 @@ def deep_update_dict(fr, to):
 @click.option('--seed', default="0", type=str, help="Comma-separated list of seeds.")
 @click.option('--exp_name', default=None)
 @click.option('--pretrain', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
-@click.option('--algo_type', type=click.Choice(['FOCAL', 'CSRO', 'CORRO', 'UNICORN', 'CLASSIFIER', 'IDAQ'], case_sensitive=False), default=None)
+@click.option('--algo_type', type=click.Choice(['FOCAL', 'RECON', 'UNICORN', 'CLASSIFIER', 'IDAQ'], case_sensitive=False), default=None)
 @click.option('--train_z0_policy', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)

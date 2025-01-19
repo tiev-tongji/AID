@@ -7,7 +7,7 @@
     "latent_size": 20,
     "env_params": {
         "n_tasks": 20,
-        "goal_radius": -0.2,
+        "goal_radius": -0.5,
         "randomize_tasks": 0,
         "max_episode_steps": 20
     },

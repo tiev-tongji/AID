@@ -19,23 +19,29 @@
         "num_steps_per_eval": 600,
         "embedding_batch_size": 256,
         "embedding_mini_batch_size": 256,
-        "max_path_length":200,
+        "max_path_length": 200,
         "discount": 0.99,
         "reward_scale": 5,
         "sparse_rewards": 0,
-        "num_exp_traj_eval": 2,
+        "num_exp_traj_eval": 1,
         "dump_eval_paths": 0,
-        "train_epoch": [50000, 1000000, 50000],
-        "eval_epoch": [50000, 1000000, 50000],
+        "train_epoch": [
+            50000,
+            1000000,
+            50000
+        ],
+        "eval_epoch": [
+            50000,
+            1000000,
+            50000
+        ],
         "sample": 1,
         "n_trj": 50,
-
         "data_dir": "./offline_dataset/humanoid-dir",
         "divergence_name": "kl",
         "use_brac": 1,
         "alpha_init": 5e2,
         "alpha_max": 2e3,
-
         "allow_backward_z": false,
         "use_FOCAL_cl": true,
         "use_club": true,

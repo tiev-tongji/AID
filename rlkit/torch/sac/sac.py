@@ -54,7 +54,6 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         self.pretrain                       = kwargs['pretrain']
         self.train_z0_policy                = kwargs['train_z0_policy']
         self.use_hvar                       = kwargs['use_hvar'] # 是否使用异方差
-        self.hvar_punish_w                  = kwargs['hvar_punish_w']
         self.policy_update_strategy         = kwargs['policy_update_strategy'] # 策略更新 BRAC or TD3BC
 
         self.recurrent                      = kwargs['recurrent'] # 是否使用循环编码器
@@ -100,6 +99,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
 
         # loss
         params = kwargs[algo_type]
+        self.hvar_punish_w                  = params['hvar_punish_w']
         self.use_recon_loss                 = params['use_recon_loss']
         self.recon_loss_weight              = params['recon_loss_weight']
 
@@ -167,6 +167,8 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
                 self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
                 self.club_model.load_state_dict(agent_ckpt['club_model'])
             if algo_type == 'UNICORN':
+                self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
+            if algo_type == 'RECON':
                 self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
 
         self.qf1_optimizer                  = optimizer_class(self.qf1.parameters(), lr=self.qf_lr)
@@ -471,13 +473,8 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         # task_z = task_z.unsqueeze(1).expand(-1, context.shape[1], -1) # (mb, b, z_dim) [2560, 20], b = 1024
         latent_z = self.agent.encode_no_mean(context).expand(mb, b, -1) # [10, 1024, 20]
         s_z_a = torch.cat([context[..., : self.obs_dim], latent_z, context[..., self.obs_dim : self.obs_dim + self.action_dim]], dim=-1) # [10, 1024, *]
-        pre_r_ns_param = self.context_decoder(s_z_a)
-        split_size = int(self.context_decoder.output_size/2)
-        pre_r_ns_mean = pre_r_ns_param[..., :split_size]
-        pre_r_ns_var = F.softplus(pre_r_ns_param[..., split_size:])
-        # 计算高斯
-        probs = -(r_ns-pre_r_ns_mean)**2/(pre_r_ns_var+epsilon) - torch.log(pre_r_ns_var**0.5+epsilon)
-        return -torch.mean(probs)
+        pre_r_ns = self.context_decoder(s_z_a)
+        return F.mse_loss(r_ns, pre_r_ns)
 
     def FOCAL_z_loss(self, indices, context, epsilon=1e-3):
         latent_z = self.agent.encode_no_mean(context).mean(dim=1)
@@ -725,7 +722,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             self.context_encoder_optimizer.step()
             if self.algo_type == 'CLASSIFIER': # CLASSIFIER
                 self.classifier_optimizer.step()
-            if self.algo_type == 'CROO' or self.algo_type == 'UNICORN': # CROO UNICORN
+            if self.algo_type == 'CROO' or self.algo_type == 'UNICORN' or self.algo_type == 'RECON': # CROO UNICORN RECON
                 self.context_decoder_optimizer.step()
 
     def _update_policy_use_BRAC(self, indices, context):

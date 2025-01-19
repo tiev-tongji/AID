@@ -20,34 +20,40 @@
         "num_steps_per_eval": 600,
         "embedding_batch_size": 256,
         "embedding_mini_batch_size": 256,
-        "max_path_length":200,
+        "max_path_length": 200,
         "discount": 0.99,
         "reward_scale": 5,
         "sparse_rewards": 0,
-        "num_exp_traj_eval": 2,
+        "num_exp_traj_eval": 1,
         "dump_eval_paths": 0,
-        "train_epoch": [50000, 1000000, 50000],
-        "eval_epoch": [50000, 1000000, 50000],
+        "train_epoch": [
+            50000,
+            1000000,
+            50000
+        ],
+        "eval_epoch": [
+            50000,
+            1000000,
+            50000
+        ],
         "sample": 1,
         "n_trj": 50,
-
         "data_dir": "./offline_dataset/walker-rand-params",
         "divergence_name": "kl",
         "use_brac": 1,
         "alpha_init": 5e1,
         "alpha_max": 1e4,
-
         "allow_backward_z": false,
         "use_FOCAL_cl": true,
         "use_club": true,
         "club_model_loss_weight": 10,
         "club_loss_weight": 25,
         "club_use_sa": true,
-
         "FOCAL": {
+            "hvar_punish_w": 5,
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/walker_rand_params/focal_mix_z0_hvar_pre/"
+            "pretrained_agent_path": "logs/walker-rand-params/pre/focal_mix_baseline_pre/"
         },
         "CSRO": {
             "use_focal_loss": true,
@@ -55,30 +61,31 @@
             "focal_loss_weight": 1.0,
             "club_loss_weight": 25,
             "club_model_loss_weight": 10,
-            "pretrained_agent_path": "logs/walker_rand_params/csro_mix_z0_hvar_pre/"
+            "pretrained_agent_path": "logs/walker-rand-params/csro_mix_z0_hvar_pre/"
         },
         "CORRO": {
             "use_infoNCE_loss": true,
             "infoNCE_loss_weight": 1.0,
             "infoNCE_temp": 0.1,
-            "pretrained_agent_path": "logs/walker_rand_params/pre/corro_mix_z0_hvar_pre/"
+            "pretrained_agent_path": "logs/walker-rand-params/pre/corro_mix_z0_hvar_pre/"
         },
         "UNICORN": {
             "use_focal_loss": true,
             "use_recon_loss": true,
             "focal_loss_weight": 0.5,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/walker_rand_params/pre/unicorn_mix_z0_hvar0.5_pre/"
+            "pretrained_agent_path": "logs/walker-rand-params/pre/unicorn_mix_z0_hvar0.5_pre/"
         },
         "CLASSIFIER": {
+            "hvar_punish_w": 25,
             "use_classify_loss": true,
             "classify_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/walker_rand_params/pre/classifier_mix_baseline_pre/"
+            "pretrained_agent_path": "logs/walker-rand-params/pre/classifier_mix_baseline_pre/"
         },
         "IDAQ": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/walker_rand_params/pre/focal_mix_z0_no_pose_hvar_pre/"
+            "pretrained_agent_path": "logs/walker-rand-params/pre/focal_mix_z0_no_pose_hvar_pre/"
         }
     },
     "util_params": {
