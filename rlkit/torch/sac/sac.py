@@ -55,6 +55,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         self.train_z0_policy                = kwargs['train_z0_policy']
         self.use_hvar                       = kwargs['use_hvar'] # 是否使用异方差
         self.policy_update_strategy         = kwargs['policy_update_strategy'] # 策略更新 BRAC or TD3BC
+        self.hete_offset                      = kwargs['hete_offset'] # 异方差损失的阈值
 
         self.recurrent                      = kwargs['recurrent'] # 是否使用循环编码器
         self.use_relabel                    = kwargs['use_relabel'] # 是否使用重标记
@@ -473,6 +474,21 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
         # task_z = task_z.unsqueeze(1).expand(-1, context.shape[1], -1) # (mb, b, z_dim) [2560, 20], b = 1024
         latent_z = self.agent.encode_no_mean(context).expand(mb, b, -1) # [10, 1024, 20]
         s_z_a = torch.cat([context[..., : self.obs_dim], latent_z, context[..., self.obs_dim : self.obs_dim + self.action_dim]], dim=-1) # [10, 1024, *]
+        pre_r_ns_param = self.context_decoder(s_z_a)
+        split_size = int(self.context_decoder.output_size/2)
+        pre_r_ns_mean = pre_r_ns_param[..., :split_size]
+        pre_r_ns_var = F.softplus(pre_r_ns_param[..., split_size:])
+        # 计算高斯
+        probs = - (r_ns - pre_r_ns_mean)**2 / (pre_r_ns_var + epsilon) - torch.log(pre_r_ns_var**0.5 + epsilon)
+        return - torch.mean(probs)
+
+    def Recon_loss2(self, context, epsilon=1e-8):
+        mb, b, _ = context.shape
+        # construct (s,z,a)
+        r_ns = context[..., self.obs_dim+self.action_dim:]
+        # task_z = task_z.unsqueeze(1).expand(-1, context.shape[1], -1) # (mb, b, z_dim) [2560, 20], b = 1024
+        latent_z = self.agent.encode_no_mean(context).expand(mb, b, -1) # [10, 1024, 20]
+        s_z_a = torch.cat([context[..., : self.obs_dim], latent_z, context[..., self.obs_dim : self.obs_dim + self.action_dim]], dim=-1) # [10, 1024, *]
         pre_r_ns = self.context_decoder(s_z_a)
         return F.mse_loss(r_ns, pre_r_ns)
 
@@ -558,8 +574,10 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
     def HeteroscedasticLoss(self, context, loss):
         latent_z = self.agent.encode_no_mean(context).view(-1, self.latent_dim)
         heteroscedastic_var = torch.mean(F.softplus(self.agent.uncertainty_mlp(latent_z.detach())))
-        # heteroscedastic_var = torch.mean(F.softplus(self.agent.uncertainty_mlp(latent_z)))
-        heteroscedastic_loss = max(1e-4, loss)/(2 * heteroscedastic_var) + torch.log(heteroscedastic_var**0.5)
+        if self.algo_type == 'UNICORN' or self.algo_type == 'RECON':
+            heteroscedastic_loss = max(1e-4, loss + self.hete_offset)/(2 * heteroscedastic_var) + torch.log(heteroscedastic_var**0.5)
+        else:
+            heteroscedastic_loss = max(1e-4, loss)/(2 * heteroscedastic_var) + torch.log(heteroscedastic_var**0.5)
         return heteroscedastic_loss, heteroscedastic_var
     
     def HeteroscedasticLoss2(self, context, loss):
@@ -626,6 +644,8 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
                 self.eval_statistics['Recon Loss'] = self.loss["recon_loss"]
             if self.loss.get("infoNCE_loss") is not None:
                 self.eval_statistics['infoNCE Loss'] = self.loss["infoNCE_loss"]
+            if self.loss.get("total_loss") is not None:
+                self.eval_statistics['Total Loss'] = self.loss["total_loss"]
 
             if self.separate_train and self.pretrain:
                 return ptu.get_numpy(self.agent.z_means), ptu.get_numpy(self.agent.z_vars)
@@ -707,23 +727,37 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
 
         # 计算异方差损失
         if self.use_hvar:
+            # if self.algo_type == 'UNICORN' or self.algo_type == 'RECON':
+            # if 0:
+            #     total_loss.backward()
+            #     self.context_encoder_optimizer.step()
+            #     if self.algo_type == 'CLASSIFIER': # CLASSIFIER
+            #         self.classifier_optimizer.step()
+            #     if self.algo_type == 'CROO' or self.algo_type == 'UNICORN' or self.algo_type == 'RECON': # CROO UNICORN RECON
+            #         self.context_decoder_optimizer.step()
+            #     heteroscedastic_loss, heteroscedastic_var = self.HeteroscedasticLoss(context, total_loss.detach())
+            #     heteroscedastic_loss.backward()
+            #     self.uncertainty_mlp_optimizer.step()
+            # else:
             heteroscedastic_loss, heteroscedastic_var = self.HeteroscedasticLoss(context, total_loss)
-            self.loss["heteroscedastic_var"] = heteroscedastic_var.item()
-        else:
-            heteroscedastic_loss = total_loss
-        heteroscedastic_loss.backward()
-        self.loss["heteroscedastic_loss"] = heteroscedastic_loss.item()
-
-        # 更新优化器 分开训练的训练部分不更新
-        if self.separate_train and not self.pretrain:
-            pass
-        else:
+            heteroscedastic_loss.backward()
             self.uncertainty_mlp_optimizer.step()
             self.context_encoder_optimizer.step()
             if self.algo_type == 'CLASSIFIER': # CLASSIFIER
                 self.classifier_optimizer.step()
             if self.algo_type == 'CROO' or self.algo_type == 'UNICORN' or self.algo_type == 'RECON': # CROO UNICORN RECON
                 self.context_decoder_optimizer.step()
+            self.loss["heteroscedastic_var"] = heteroscedastic_var.item()
+            self.loss["heteroscedastic_loss"] = heteroscedastic_loss.item()
+        else:
+            total_loss.backward()
+            self.uncertainty_mlp_optimizer.step()
+            self.context_encoder_optimizer.step()
+            if self.algo_type == 'CLASSIFIER': # CLASSIFIER
+                self.classifier_optimizer.step()
+            if self.algo_type == 'CROO' or self.algo_type == 'UNICORN' or self.algo_type == 'RECON': # CROO UNICORN RECON
+                self.context_decoder_optimizer.step()
+        self.loss["total_loss"] = total_loss.item()
 
     def _update_policy_use_BRAC(self, indices, context):
         """
@@ -801,7 +835,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
             else:
                 transitions = torch.cat([obs, actions, rewards], dim=-1)
             transition_heterodastic_var = F.softplus(self.agent.uncertainty_mlp(self.agent.encode_no_mean(transitions))).detach()
-
+            self.loss["heteroscedastic_var"] = torch.mean(transition_heterodastic_var).item()
             transition_heterodastic_var_flat = transition_heterodastic_var.view(self.batch_size * len(indices), -1)
             var0 = ptu.zeros_like(transition_heterodastic_var_flat)
             transition_heterodastic_var_flat = torch.cat([var0, transition_heterodastic_var_flat], dim=0)

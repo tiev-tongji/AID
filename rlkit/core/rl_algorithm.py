@@ -587,92 +587,92 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_np_zs_{epoch}.png', zs=[online_train_np_zs], subplot_title_lst=[f'online_train_np_zs_{epoch}'])
             # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_np_zs_{epoch}.png', zs=[online_test_np_zs], subplot_title_lst=[f'online_test_np_zs_{epoch}'])
 
-    def draw_path(self, epoch, logdir):
-        idx = random.choice(self.eval_tasks)
-        paths, heterodastic_vars = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
-
-        fig = plt.figure(figsize=(12, 9))
-        ax = plt.gca()
-
-        # 画半圆（只画上半部分，起始角度 0° 到 180°）
+    def draw_path(self, epoch, logdir, is_baseline=False, min_5 = None, max_95 = None):
         import matplotlib.patches as patches
-        half_circle = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=1)
-        ax.add_artist(half_circle)
+        for idx in self.eval_tasks:
+            paths, heterodastic_vars = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
 
-        ax.set_xlim(-1.1, 1.1)  # x 轴范围 [-1, 1]
-        ax.set_ylim(-0.2, 1.2)   # y 轴范围 [0, 1]
-        ax.set_aspect('equal', 'box')
+            fig = plt.figure(figsize=(12, 9))
+            ax = plt.gca()
 
-        markers = ['^', 's', 'o', 'x', 'D', '*']  # 三角形、方块、圆点、叉叉、菱形、星号
-        colors = [(117./255., 196./255., 175./255.), (249./255., 116./255., 70./255.)]
-        linestyles = ['-', '--', '-.']
-        lines_for_legend = []  # 存储用于显示在图例中的线条
-        save_data = []
-        for i, path in enumerate(paths[:2]):
-            observations = np.array(path['observations'])
-            heterodastic_var = np.array(heterodastic_vars[i])
-            line, = plt.plot(observations[:, 0], observations[:, 1], color=colors[i % len(colors)], linestyle='-', label=f'Trajectory Line {i + 1}', linewidth=2, zorder=1)
-            sc = plt.scatter(observations[:, 0], observations[:, 1], c=heterodastic_var, cmap='coolwarm', marker='o', label=f'Trajectory {i + 1}', zorder=2)
-            save_data.append({
-                'observations': observations.tolist(),
-                'heterodastic_var': heterodastic_var.tolist(),
-                'goal': path['goal']
-            })
-            lines_for_legend.append(line)
+            # 画半圆（只画上半部分，起始角度 0° 到 180°）
+            half_circle = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=1)
+            ax.add_artist(half_circle)
 
-        goal = path['goal']
-        plt.axis('off')
-        goal_point = plt.scatter(
-            goal[0], goal[1],
-            edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
-            facecolors='none',           # 空心
-            marker='*',
-            label='Goal',
-            s=200,                       # 控制圆圈的大小，增大半径
-            linewidths=2,                # 设置边框线宽
-            zorder=3                     # 控制绘制顺序
-        )
-        lines_for_legend.append(goal_point)
+            ax.set_xlim(-1.1, 1.1)  # x 轴范围 [-1, 1]
+            ax.set_ylim(-0.2, 1.2)   # y 轴范围 [0, 1]
+            ax.set_aspect('equal', 'box')
 
-        start = (0.,0.)
-        start_point = plt.scatter(
-            start[0], start[1],
-            edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
-            facecolors='none',
-            marker='o',
-            label='Start',
-            s=150,                       # 控制圆圈的大小，增大半径
-            linewidths=2,                # 设置边框线宽
-            zorder=3                     # 控制绘制顺序
-        )
-        lines_for_legend.append(start_point)
+            # markers = ['^', 's', 'o', 'x', 'D', '*']  # 三角形、方块、圆点、叉叉、菱形、星号
+            colors = [(117./255., 196./255., 175./255.), (249./255., 116./255., 70./255.)]
+            # linestyles = ['-', '--', '-.']
+            lines_for_legend = []  # 存储用于显示在图例中的线条
+            save_data = []
+            vmin = min_5 if min_5 is not None else np.min(heterodastic_vars)
+            vmax = max_95 if max_95 is not None else np.max(heterodastic_vars)
+            for i, path in enumerate(paths[:2]):
+                observations = np.array(path['observations'])
+                heterodastic_var = np.array(heterodastic_vars[i])
+                line, = plt.plot(observations[:, 0], observations[:, 1], color=colors[i % len(colors)], linestyle='-', label=f'episode Line {i + 1}', linewidth=2, zorder=1)
+                sc = plt.scatter(observations[:, 0], observations[:, 1], c=heterodastic_var, cmap='coolwarm', marker='o', label=f'episode {i + 1}', zorder=2)
+                sc = plt.scatter(observations[:, 0], observations[:, 1], c=heterodastic_var, cmap='coolwarm', vmin=vmin, vmax=vmax, marker='o', label=f'episode {i + 1}', zorder=2)
+                save_data.append({
+                    'observations': observations.tolist(),
+                    'heterodastic_var': heterodastic_var.tolist(),
+                    'goal': path['goal']
+                })
+                lines_for_legend.append(line)
 
-        cbar = plt.colorbar(sc, label='Uncertainty', fraction=0.05, pad=0.04, shrink=0.7, aspect=20)
-        cbar.ax.tick_params(labelsize=12)  # 调整 colorbar 标签字体大小
-        plt.title(f'Point-Robot {self.algo_type} + Ours', pad=20, fontsize=20)
-        # plt.title(f'Point-Robot {self.algo_type}', pad=20, fontsize=20)
-        plt.xlabel('X')
-        plt.ylabel('Y')
-        # plt.legend(loc='upper right')
-        plt.legend(handles=lines_for_legend, loc='upper right', fontsize=12)
+            goal = path['goal']
+            plt.axis('off')
+            goal_point = plt.scatter(
+                goal[0], goal[1],
+                edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
+                facecolors='none',           # 空心
+                marker='*',
+                label='Goal',
+                s=200,                       # 控制圆圈的大小，增大半径
+                linewidths=2,                # 设置边框线宽
+                zorder=3                     # 控制绘制顺序
+            )
+            lines_for_legend.append(goal_point)
 
-        fig_save_dir = logdir + '/figures'
-        if not os.path.exists(fig_save_dir):
-            os.makedirs(fig_save_dir)
-        plt.savefig(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}.png', dpi=400)
-        plt.close()
-        
-        with open(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}.txt', 'w') as f:
-            for i, data in enumerate(save_data):
-                f.write(f'Trajectory {i + 1}:\n')
-                f.write(f'Observations:\n{data["observations"]}\n')
-                f.write(f'Uncertainty:\n{data["heterodastic_var"]}\n')
-                f.write(f'Goal:\n{data["goal"]}\n\n')
+            start = (0.,0.)
+            start_point = plt.scatter(
+                start[0], start[1],
+                edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
+                facecolors='none',
+                marker='o',
+                label='Start',
+                s=150,                       # 控制圆圈的大小，增大半径
+                linewidths=2,                # 设置边框线宽
+                zorder=3                     # 控制绘制顺序
+            )
+            lines_for_legend.append(start_point)
+
+            cbar = plt.colorbar(sc, label='Uncertainty', fraction=0.05, pad=0.04, shrink=0.7, aspect=20)
+            cbar.ax.tick_params(labelsize=12)  # 调整 colorbar 标签字体大小
+            if is_baseline:
+                plt.title(f'Point-Robot {self.algo_type}', pad=20, fontsize=20)
+            else:
+                plt.title(f'Point-Robot {self.algo_type} + Ours', pad=20, fontsize=20)
+            plt.xlabel('X')
+            plt.ylabel('Y')
+            # plt.legend(loc='upper right')
+            plt.legend(handles=lines_for_legend, loc='upper right', fontsize=12)
+
+            fig_save_dir = logdir + '/figures'
+            if not os.path.exists(fig_save_dir):
+                os.makedirs(fig_save_dir)
+            plt.savefig(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_{idx}.pdf', dpi=400, bbox_inches='tight')
+            plt.close()
     
     def show_return(self, tb_writer, epoch):
         if self.tb_writer is None:
             self.tb_writer = tb_writer
         self.evaluate(epoch)
+        logger.record_tabular("Epoch", epoch)
+        logger.dump_tabular(with_prefix=False, with_timestamp=False, tb_writer = self.tb_writer)
 
     def collect_offline_paths(self, idx, epoch, run, buffer):
         self.task_idx = idx
@@ -766,7 +766,6 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                     accum_context=True)
                 paths += path
                 num_transitions += num
-                # if num_transitions >= self.num_exp_traj_eval * self.max_path_length and self.agent.context is not None:
                 heterodastic_var = self.agent.infer_posterior(self.agent.context).squeeze().cpu().numpy()
 
         if self.sparse_rewards:
@@ -798,7 +797,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 max_samples=np.inf,
                 max_trajs=1,
                 accum_context=True,
-                np_online_collect=True)
+                np_online_collect=(i==0))
             paths += path
             num_transitions += num
             # if num_transitions >= self.num_exp_traj_eval * self.max_path_length and self.agent.context is not None:

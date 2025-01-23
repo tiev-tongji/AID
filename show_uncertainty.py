@@ -9,12 +9,36 @@ import multiprocessing as mp
 from pathlib import Path
 from itertools import product
 import torch.nn.functional as F
+import sys
+import ast
+
+np.int = int  # 动态修复 np.int 被废弃的问题
+
+mujoco_version = '200'  # 默认版本
+if '--mujoco_version' in sys.argv:
+    idx = sys.argv.index('--mujoco_version')
+    if idx + 1 < len(sys.argv):
+        mujoco_version = sys.argv[idx + 1].strip()
+
+# 设置 MuJoCo 环境变量
+if mujoco_version == '131':
+    os.environ['MUJOCO_PY_MJPRO_PATH'] = os.path.expanduser('~/.mujoco/mjpro131')
+    os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:{os.path.expanduser('~/.mujoco/mjpro131/bin')}:/usr/lib/nvidia"
+elif mujoco_version == '200':
+    os.environ['MUJOCO_PY_MJPRO_PATH'] = '/home/autolab/.mujoco/mujoco200'
+    os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:/home/autolab/.mujoco/mujoco200/bin:/usr/lib/nvidia"
+else:
+    raise ValueError(f"Unsupported MuJoCo version: {mujoco_version}. Supported versions: '131', '200'")
+
+print(f"MuJoCo version {mujoco_version} set successfully!")
 
 from rlkit.envs import ENVS
 from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
+from rlkit.torch.sac.sac import CSROSoftActorCritic
+from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
 from configs.default import default_config
@@ -196,9 +220,10 @@ def show_uncertainty(variant, gpu_id, seed):
         else:
             training_date_steps = quality_steps
         for j in training_date_steps:
-            # if j % 400 == 0:
-                # continue
-            for k in range(0, n_trj,2):
+            print(f'goal_idx{i}, step{j}')
+            if j % 400 == 0:
+                continue
+            for k in range(0, n_trj, 10):
                 train_trj_paths += [os.path.join(data_dir, f"goal_idx{i}", f"trj_evalsample{k}_step{j}.npy")]
                 eval_trj_paths += [os.path.join(data_dir, f"goal_idx{i}", f"trj_evalsample{k}_step{j}.npy")]
         
@@ -256,12 +281,13 @@ def show_uncertainty(variant, gpu_id, seed):
     train_z_var = F.softplus(uncertainty_mlp(train_z)).detach().cpu().numpy()
     eval_z_var = F.softplus(uncertainty_mlp(eval_z)).detach().cpu().numpy()
     print(f'10%分位数: {train_z_var.min() + 0.1*(train_z_var.max()-train_z_var.min())}')
-    print(1)
-    if variant['algo_type'] == 'CSRO':
+    train_labels = torch.tensor([np.where(train_tasks == task_id)[0] for task_id in task_train_lst]).to(ptu.device).reshape(-1)
+
+    if variant['algo_type'] == 'FOCAL':
         focal_loss = FOCAL_z_loss_per_sample(train_labels, train_z).detach().cpu().numpy()
-        train_z_var[train_z_var > 1.4] = 1.4
+        train_z_var[train_z_var > 2.0] = 2.0
         loss = focal_loss
-        loss [loss > 3] = 3
+        loss [loss > 2.0] = 2.0
 
     elif variant['algo_type'] == 'UNICORN':
         focal_loss = FOCAL_z_loss_per_sample(train_labels, train_z).detach().cpu().numpy()
@@ -275,10 +301,10 @@ def show_uncertainty(variant, gpu_id, seed):
         loss = unicorn_loss
     
     elif variant['algo_type'] == 'CLASSIFIER':
-        train_labels = torch.tensor([np.where(train_tasks == task_id)[0] for task_id in task_train_lst]).to(ptu.device).reshape(-1)
         classifier_loss = F.cross_entropy(classifier(train_z), train_labels, reduction='none').detach().cpu().numpy()
+        train_z_var[train_z_var > 0.01] = 0.01
         loss = classifier_loss
-        loss[loss > 0.2] = 0.2 
+        loss[loss > 0.01] = 0.01
 
     print(f'train_context shape: {train_context.shape}')
     print(f'eval_context shape: {eval_context.shape}')
@@ -289,17 +315,12 @@ def show_uncertainty(variant, gpu_id, seed):
     print(f'loss shape: {loss.shape}')
 
     import matplotlib.pyplot as plt
-
-    fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3, 2, figsize=(16, 18))
+    fig, ((ax1, ax2), (ax5, ax6)) = plt.subplots(2, 2, figsize=(16, 8), height_ratios=[2, 1])
 
     ax1.set_xlim(-1.2, 1.2)
-    ax1.set_ylim(-1.2, 1.2)
+    ax1.set_ylim(-0.2, 1.2)
     ax2.set_xlim(-1.2, 1.2)
-    ax2.set_ylim(-1.2, 1.2)
-    ax3.set_xlim(-1.2, 1.2)
-    ax3.set_ylim(-1.2, 1.2)
-    ax4.set_xlim(-1.2, 1.2)
-    ax4.set_ylim(-1.2, 1.2)
+    ax2.set_ylim(-0.2, 1.2)
 
     # 绘制训练数据的散点热力图
     sample_ids = np.random.choice(len(obs_train_lst), 1000, replace=False)
@@ -308,38 +329,32 @@ def show_uncertainty(variant, gpu_id, seed):
         z_var = train_z_var[i]
         loss_i = loss[i]
         # 根据 z_var 大小设置热力图颜色
-        z_var_color = plt.cm.coolwarm(z_var / train_z_var.max())
-        loss_color = plt.cm.coolwarm(loss_i / loss.max())
-        # z_var_normalized = (z_var - train_z_var.min()) / (train_z_var.max() - train_z_var.min())
-        # z_var_color = plt.cm.coolwarm(z_var_normalized)  # 应用颜色映射
-        # loss_normalized = (loss_i - (loss.min())) / (loss.max() - (loss.min()))
-        # loss_color = plt.cm.coolwarm(loss_normalized)
+        # z_var_color = plt.cm.coolwarm(z_var / train_z_var.max())
+        # loss_color = plt.cm.coolwarm(loss_i / loss.max())
+        z_var_color = plt.cm.coolwarm((z_var - train_z_var.min()) / (train_z_var.max() - train_z_var.min()))  # 应用颜色映射
+        loss_color = plt.cm.coolwarm((loss_i - (loss.min())) / (loss.max() - (loss.min())))
         ax1.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=z_var_color, s=10)
         ax2.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=loss_color, s=10)
-        if z_var >= train_z_var.min() + 0.1 * (train_z_var.max() - train_z_var.min()):
-            ax3.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=z_var_color, s=10)
-        if loss_i >= loss.min() + 0.1 * (loss.max() - (loss.min())):
-            ax4.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=loss_color, s=10)
+        # if z_var >= train_z_var.min() + 0.1 * (train_z_var.max() - train_z_var.min()):
+        #     ax3.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=z_var_color, s=10)
+        # if loss_i >= loss.min() + 0.1 * (loss.max() - (loss.min())):
+        #     ax4.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=loss_color, s=10)
 
     # 为 ax1 和 ax2 设置热力图颜色条
     sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=plt.Normalize(vmin=train_z_var.min(), vmax=train_z_var.max()))
     sm.set_array([])
-    fig.colorbar(sm, ax=ax3, orientation='horizontal', label='Z Var')
+    fig.colorbar(sm, ax=ax1, orientation='horizontal', label='Uncertainty')
 
     sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=plt.Normalize(vmin=loss.min(), vmax=loss.max()))
     sm.set_array([])
-    fig.colorbar(sm, ax=ax4, orientation='horizontal', label='Loss') 
+    fig.colorbar(sm, ax=ax2, orientation='horizontal', label='Loss') 
 
-    ax1.set_title('Train Z Var')
+    ax1.set_title('Train Uncertainty')
     ax2.set_title('Loss')
     ax1.set_xlabel('X')
     ax1.set_ylabel('Y')
     ax2.set_xlabel('X')
     ax2.set_ylabel('Y')
-    ax3.set_xlabel('X')
-    ax3.set_ylabel('Y')
-    ax4.set_xlabel('X')
-    ax4.set_ylabel('Y')
 
     # 画z_var的分布直方图
     # Create histograms with different colors for each bin and black edges
@@ -352,7 +367,7 @@ def show_uncertainty(variant, gpu_id, seed):
 
     plt.tight_layout()
     # 保存图片
-    plt.savefig('z_var.png')
+    plt.savefig('uncertainty.png')
     
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
@@ -364,13 +379,15 @@ def deep_update_dict(fr, to):
             to[k] = v
     return to
 
+# python show_uncertainty.py configs/point-robot.json --gpu 0 --seed 5 --exp_name focal_mix_z0_hvar_p10_weighted --algo_type FOCAL --mujoco_version 200
 @click.command()
 @click.argument('config', default=None)
+@click.option('--mujoco_version', type=click.Choice(['131', '200'], case_sensitive=False), default='200', help='MuJoCo version, default is --mujoco_version=200')
 @click.option('--gpu', default=0)
 @click.option('--seed', default=0)
 @click.option('--exp_name', default=None)
 @click.option('--algo_type', default=None)
-def main(config, gpu, seed, exp_name, algo_type):
+def main(config, mujoco_version, gpu, seed, exp_name, algo_type):
     variant = default_config
     if config:
         with open(os.path.join(config)) as f:

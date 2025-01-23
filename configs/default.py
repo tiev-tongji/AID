@@ -24,6 +24,7 @@ default_config = dict(
         z_strategy = 'mean', # how to sample z, one of ['mean', 'min', 'weighted', 'quantile']
         eval_deterministic=False, # whether to evaluate the deterministic policy
         policy_update_strategy='BRAC', # choose between 'BRAC' and 'TD3BC'
+        hete_offset=10.0, # offset for heteroscedasticity loss
 
         # 基本训练参数
         soft_target_tau=0.005, # for SAC target network update
@@ -232,6 +233,7 @@ default_config = dict(
             infoNCE_temp = 0.1,
         ),
         IDAQ = dict(
+            hvar_punish_w = 0,
             use_recon_loss = False,
             use_focal_loss = True,
             use_club_loss = False,
