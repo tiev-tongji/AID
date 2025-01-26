@@ -43,7 +43,7 @@ from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
-from rlkit.torch.sac.sac import CSROSoftActorCritic
+from rlkit.torch.sac.sac import CERTAINSoftActorCritic
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
@@ -191,7 +191,7 @@ def experiment(gpu_id, variant, seed=None):
     
     # Choose algorithm
     algo_type = variant['algo_type']
-    algorithm = CSROSoftActorCritic(
+    algorithm = CERTAINSoftActorCritic(
         env=env,
         train_tasks=train_tasks,
         eval_tasks=eval_tasks,

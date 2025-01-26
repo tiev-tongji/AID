@@ -44,7 +44,7 @@ from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
-from rlkit.torch.sac.sac import CSROSoftActorCritic
+from rlkit.torch.sac.sac import CERTAINSoftActorCritic
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
@@ -186,7 +186,7 @@ def experiment(gpu_id, variant, seed=None):
     
     # Choose algorithm
     algo_type = variant['algo_type']
-    algorithm = CSROSoftActorCritic(
+    algorithm = CERTAINSoftActorCritic(
         env=env,
         train_tasks=train_tasks,
         eval_tasks=eval_tasks,
@@ -258,14 +258,14 @@ def deep_update_dict(fr, to):
 @click.option('--gpu', default="0,1,2,3", type=str, help="Comma-separated list of gpu.")
 @click.option('--seed', default="0", type=str, help="Comma-separated list of seeds.")
 @click.option('--exp_name', default=None)
-@click.option('--pretrain', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--algo_type', type=click.Choice(['FOCAL', 'CSRO', 'CORRO', 'UNICORN', 'CLASSIFIER', 'IDAQ'], case_sensitive=False), default=None)
 @click.option('--train_z0_policy', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)
 @click.option('--r_thres', default=None)
-# python show_return.py configs/point-robot.json --exp_name classifier_mix_z0_hvar_mean --gpu 5,6 --seed 0,3,4 --algo_type CLASSIFIER --pretrain true --z_strategy weighted --train_z0_policy true --use_hvar true
-def main(config, mujoco_version, gpu, seed, exp_name=None, pretrain=None, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
+# python show_return.py configs/point-robot.json --exp_name classifier_mix_z0_hvar_mean --gpu 5,6 --seed 0,3,4 --algo_type CLASSIFIER --z_strategy weighted --train_z0_policy true --use_hvar true
+# python show_return.py  configs/walker_rand_params.json --gpu 2,7 --seed 0,1,2,4 --exp_name classifier_mix_z0_hvar_p25_weighted --algo_type CLASSIFIER --train_z0_policy true --use_hvar true --z_strategy weighted --mujoco_version 131
+def main(config, mujoco_version, gpu, seed, exp_name=None, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
     variant = default_config
     if config:
         with open(os.path.join(config)) as f:

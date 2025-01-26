@@ -20,7 +20,7 @@ import atexit
 profile = LineProfiler()
 atexit.register(profile.print_stats)
 
-class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
+class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
     def __init__(
             self,
             env,
@@ -147,7 +147,7 @@ class CSROSoftActorCritic(OfflineMetaRLAlgorithm):
 
         # 分开训练的训练部分，不更新
         if self.separate_train and not self.pretrain:
-            print('*************************Using pretrained agent************************')
+            print(f'*************************Using pretrained agent:{kwargs[algo_type]['pretrained_agent_path']}************************')
             agent_path = Path(kwargs[algo_type]['pretrained_agent_path'])
             if not agent_path.exists():
                 raise ValueError(f"separate_train is True but pretrained_agent_path does not exist: {agent_path}")

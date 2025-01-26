@@ -43,7 +43,7 @@
         "alpha_init": 5e2,
         "alpha_max": 2e3,
         "FOCAL": {
-            "hvar_punish_w": 2,
+            "hvar_punish_w": 0.1,
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
             "pretrained_agent_path": "logs/ant-goal/pre/focal_mix_z0_hvar_pre"
@@ -62,17 +62,25 @@
             "infoNCE_temp": 0.1,
             "pretrained_agent_path": "logs/ant-goal/pre/corro_mix_z0_hvar_pre"
         },
+        "RECON": {
+            "hvar_punish_w": 2,
+            "use_recon_loss": true,
+            "recon_loss_weight": 1.0,
+            "pretrained_agent_path": "logs/ant-goal/"
+        },
         "UNICORN": {
+            "hvar_punish_w": 2,
             "use_focal_loss": true,
             "use_recon_loss": true,
             "focal_loss_weight": 0.1,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-goal/pre/unicorn_mix_z0_hvar0.5_pre"
+            "pretrained_agent_path": "logs/ant-goal/unicorn_mix_baseline0.1_pre"
         },
         "CLASSIFIER": {
+            "hvar_punish_w": 5,
             "use_classify_loss": true,
             "classify_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-goal/pre/classifier_mix_baseline_pre"
+            "pretrained_agent_path": "logs/ant-goal/pre/classifier_mix_z0_hvar_pre"
         },
         "CROO": {
             "use_croo_loss": true,
@@ -82,7 +90,7 @@
         "IDAQ": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-goal/pre/focal_mix_z0_no_pose_hvar_pre"
+            "pretrained_agent_path": "logs/ant-goal/pre/focal_mix_baseline_pre"
         }
     },
     "util_params": {

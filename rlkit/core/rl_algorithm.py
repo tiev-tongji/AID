@@ -589,14 +589,17 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
     def draw_path(self, epoch, logdir, is_baseline=False, min_5 = None, max_95 = None):
         import matplotlib.patches as patches
+        import seaborn as sns
+
         for idx in self.eval_tasks:
             paths, heterodastic_vars = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
 
-            fig = plt.figure(figsize=(12, 9))
+            fig = plt.figure(figsize=(20, 12))
+            sns.set_theme(style="white", font_scale=2.0)
+
             ax = plt.gca()
 
-            # 画半圆（只画上半部分，起始角度 0° 到 180°）
-            half_circle = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=1)
+            half_circle = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=2)
             ax.add_artist(half_circle)
 
             ax.set_xlim(-1.1, 1.1)  # x 轴范围 [-1, 1]
@@ -613,9 +616,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             for i, path in enumerate(paths[:2]):
                 observations = np.array(path['observations'])
                 heterodastic_var = np.array(heterodastic_vars[i])
-                line, = plt.plot(observations[:, 0], observations[:, 1], color=colors[i % len(colors)], linestyle='-', label=f'episode Line {i + 1}', linewidth=2, zorder=1)
-                sc = plt.scatter(observations[:, 0], observations[:, 1], c=heterodastic_var, cmap='coolwarm', marker='o', label=f'episode {i + 1}', zorder=2)
-                sc = plt.scatter(observations[:, 0], observations[:, 1], c=heterodastic_var, cmap='coolwarm', vmin=vmin, vmax=vmax, marker='o', label=f'episode {i + 1}', zorder=2)
+                line, = plt.plot(observations[:, 0], observations[:, 1], color=colors[i % len(colors)], linestyle='-', label=f'episode Line {i + 1}', linewidth=4, zorder=1)
+                sc = plt.scatter(observations[:, 0], observations[:, 1], c=heterodastic_var, cmap='coolwarm', vmin=vmin, vmax=vmax, marker='o', label=f'episode {i + 1}', linewidth=4, zorder=2)
                 save_data.append({
                     'observations': observations.tolist(),
                     'heterodastic_var': heterodastic_var.tolist(),
@@ -631,8 +633,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 facecolors='none',           # 空心
                 marker='*',
                 label='Goal',
-                s=200,                       # 控制圆圈的大小，增大半径
-                linewidths=2,                # 设置边框线宽
+                s=500,                       # 控制圆圈的大小，增大半径
+                linewidths=3,                # 设置边框线宽
                 zorder=3                     # 控制绘制顺序
             )
             lines_for_legend.append(goal_point)
@@ -644,22 +646,21 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 facecolors='none',
                 marker='o',
                 label='Start',
-                s=150,                       # 控制圆圈的大小，增大半径
-                linewidths=2,                # 设置边框线宽
+                s=450,                       # 控制圆圈的大小，增大半径
+                linewidths=3,                # 设置边框线宽
                 zorder=3                     # 控制绘制顺序
             )
             lines_for_legend.append(start_point)
-
-            cbar = plt.colorbar(sc, label='Uncertainty', fraction=0.05, pad=0.04, shrink=0.7, aspect=20)
-            cbar.ax.tick_params(labelsize=12)  # 调整 colorbar 标签字体大小
-            if is_baseline:
-                plt.title(f'Point-Robot {self.algo_type}', pad=20, fontsize=20)
-            else:
-                plt.title(f'Point-Robot {self.algo_type} + Ours', pad=20, fontsize=20)
+            cbar = plt.colorbar(sc, label='Uncertainty', fraction=0.05, pad=0.1, shrink=1.0, aspect=20, orientation='horizontal')
+            cbar.ax.tick_params(labelsize=20)
+            # if is_baseline:
+            #     plt.title(f'Point-Robot {self.algo_type}', pad=20, fontsize=20)
+            # else:
+            #     plt.title(f'Point-Robot {self.algo_type} + Ours', pad=20, fontsize=20)
             plt.xlabel('X')
             plt.ylabel('Y')
             # plt.legend(loc='upper right')
-            plt.legend(handles=lines_for_legend, loc='upper right', fontsize=12)
+            plt.legend(handles=lines_for_legend, loc='upper right')
 
             fig_save_dir = logdir + '/figures'
             if not os.path.exists(fig_save_dir):

@@ -16,7 +16,7 @@ from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
 from rlkit.core.rl_algorithm import OfflineMetaRLAlgorithm
-from rlkit.torch.sac.sac import CSROSoftActorCritic
+from rlkit.torch.sac.sac import CERTAINSoftActorCritic
 from rlkit.torch.sac.croo import CROOSoftActorCritic
 from rlkit.torch.sac.unicorn import UNICORNSoftActorCritic
 from rlkit.torch.sac.classifier import CLASSIFIERSoftActorCritic 

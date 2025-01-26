@@ -43,7 +43,7 @@ from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
-from rlkit.torch.sac.sac import CSROSoftActorCritic
+from rlkit.torch.sac.sac import CERTAINSoftActorCritic
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
@@ -55,7 +55,7 @@ def global_seed(seed=0):
     np.random.seed(seed)
     random.seed(seed)
 
-def experiment(gpu_id, variant, seed=None):
+def experiment(gpu_id, variant, seed=None, hvar_path=None):
     os.sched_setaffinity(0, [gpu_id*8+i for i in range(8)])
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
@@ -185,7 +185,7 @@ def experiment(gpu_id, variant, seed=None):
     
     # Choose algorithm
     algo_type = variant['algo_type']
-    algorithm = CSROSoftActorCritic(
+    algorithm = CERTAINSoftActorCritic(
         env=env,
         train_tasks=train_tasks,
         eval_tasks=eval_tasks,
@@ -220,6 +220,10 @@ def experiment(gpu_id, variant, seed=None):
         algorithm.agent.uncertainty_mlp.load_state_dict(agent_ckpt['uncertainty_mlp'])
         algorithm.agent.context_encoder.load_state_dict(agent_ckpt['context_encoder'])
 
+    if hvar_path is not None:
+        agent_ckpt = torch.load(str(hvar_path))
+        algorithm.agent.uncertainty_mlp.load_state_dict(agent_ckpt['uncertainty_mlp'])
+
     # optional GPU mode
     ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
     if ptu.gpu_enabled():
@@ -236,7 +240,7 @@ def experiment(gpu_id, variant, seed=None):
     #     Path(pickle_dir).mkdir(parents=True, exist_ok=True)
 
     # run the algorithm
-    algorithm.draw_path(variant['algo_params']['num_iterations'], str(log_dir))
+    algorithm.draw_path(variant['algo_params']['num_iterations'], str(log_dir), is_baseline=(hvar_path is not None))
 
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
@@ -254,14 +258,15 @@ def deep_update_dict(fr, to):
 @click.option('--gpu', default="0,1,2,3", type=str, help="Comma-separated list of gpu.")
 @click.option('--seed', default="0", type=str, help="Comma-separated list of seeds.")
 @click.option('--exp_name', default=None)
-@click.option('--pretrain', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
+@click.option('--hvar_path', default=None)
 @click.option('--algo_type', type=click.Choice(['FOCAL', 'CSRO', 'CORRO', 'UNICORN', 'CLASSIFIER', 'IDAQ'], case_sensitive=False), default=None)
 @click.option('--train_z0_policy', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)
 @click.option('--r_thres', default=None)
-# python show_path.py configs/point-robot.json --gpu 0 --seed 0 --exp_name focal_mix_z0_hvar_weighted --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
-def main(config, mujoco_version, gpu, seed, exp_name=None, pretrain=None, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
+# python show_path.py configs/point-robot.json --gpu 0 --seed 0 --exp_name focal_mix_z0_hvar_p10_weighted --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
+# python show_path.py configs/point-robot.json --gpu 0 --seed 5 --exp_name focal_mix_baseline --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted --hvar_path ./logs/point-robot/focal_mix_z0_hvar_p10_weighted/seed5/agent.pth 
+def main(config, mujoco_version, gpu, seed, exp_name=None, hvar_path=None, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
     variant = default_config
     if config:
         with open(os.path.join(config)) as f:
@@ -274,7 +279,7 @@ def main(config, mujoco_version, gpu, seed, exp_name=None, pretrain=None, algo_t
     
     if not (exp_name == None):
         variant['util_params']['exp_name'] = exp_name
-    variant['algo_params']['pretrain'] = False
+    variant['algo_params']['pretrain'] = True
     if not (algo_type == None):
         variant['algo_type'] = algo_type.upper()
     if not (train_z0_policy == None):
@@ -287,7 +292,7 @@ def main(config, mujoco_version, gpu, seed, exp_name=None, pretrain=None, algo_t
         variant['algo_params']['r_thres'] = float(r_thres)
 
     seed = [int(s) for s in seed.split(",")]
-    experiment(gpu_id=gpu[0], variant=variant, seed=seed[0])
+    experiment(gpu_id=gpu[0], variant=variant, seed=seed[0], hvar_path=hvar_path)
 
 if __name__ == "__main__":
     main()

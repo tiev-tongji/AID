@@ -37,7 +37,7 @@ from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
-from rlkit.torch.sac.sac import CSROSoftActorCritic
+from rlkit.torch.sac.sac import CERTAINSoftActorCritic
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
@@ -315,12 +315,29 @@ def show_uncertainty(variant, gpu_id, seed):
     print(f'loss shape: {loss.shape}')
 
     import matplotlib.pyplot as plt
-    fig, ((ax1, ax2), (ax5, ax6)) = plt.subplots(2, 2, figsize=(16, 8), height_ratios=[2, 1])
+    import matplotlib.patches as patches
+    import seaborn as sns
+    from matplotlib import rcParams
+    rcParams.update({'font.size': 16})
+    fig, ((ax1, ax2), (ax5, ax6)) = plt.subplots(2, 2, figsize=(18, 10), height_ratios=[2.3, 1])
+    sns.set_theme(style="white", font_scale=2.0)
 
     ax1.set_xlim(-1.2, 1.2)
-    ax1.set_ylim(-0.2, 1.2)
+    ax1.set_ylim(-0.1, 1.2)
     ax2.set_xlim(-1.2, 1.2)
-    ax2.set_ylim(-0.2, 1.2)
+    ax2.set_ylim(-0.1, 1.2)
+    ax1.set_frame_on(False)
+    ax2.set_frame_on(False)
+    half_circle1 = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=2)
+    half_circle2 = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=2)
+    ax1.add_artist(half_circle1)
+    ax2.add_artist(half_circle2)
+    ax1.set_aspect('equal')
+    ax2.set_aspect('equal')
+    ax1.set_xticks([])  # 去掉 x 轴刻度
+    ax1.set_yticks([])  # 去掉 y 轴刻度
+    ax2.set_xticks([])  # 去掉 x 轴刻度
+    ax2.set_yticks([])  # 去掉 y 轴刻度
 
     # 绘制训练数据的散点热力图
     sample_ids = np.random.choice(len(obs_train_lst), 1000, replace=False)
@@ -343,18 +360,19 @@ def show_uncertainty(variant, gpu_id, seed):
     # 为 ax1 和 ax2 设置热力图颜色条
     sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=plt.Normalize(vmin=train_z_var.min(), vmax=train_z_var.max()))
     sm.set_array([])
-    fig.colorbar(sm, ax=ax1, orientation='horizontal', label='Uncertainty')
+    fig.colorbar(sm, ax=ax1, orientation='horizontal')
 
     sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=plt.Normalize(vmin=loss.min(), vmax=loss.max()))
     sm.set_array([])
-    fig.colorbar(sm, ax=ax2, orientation='horizontal', label='Loss') 
+    fig.colorbar(sm, ax=ax2, orientation='horizontal') 
 
     ax1.set_title('Train Uncertainty')
     ax2.set_title('Loss')
-    ax1.set_xlabel('X')
-    ax1.set_ylabel('Y')
-    ax2.set_xlabel('X')
-    ax2.set_ylabel('Y')
+
+    ax5.set_xlabel('value')
+    ax5.set_ylabel('count')
+    ax6.set_xlabel('value')
+    ax6.set_ylabel('count')
 
     # 画z_var的分布直方图
     # Create histograms with different colors for each bin and black edges
@@ -363,11 +381,11 @@ def show_uncertainty(variant, gpu_id, seed):
     print(f'eval_hist: {eval_hist}')
     print(f'eval_bins: {eval_bins}')
 
-    plt.suptitle(f"{variant['util_params']['exp_name']}", fontsize=16)
+    # plt.suptitle(f"{variant['util_params']['exp_name']}", fontsize=16)
 
     plt.tight_layout()
     # 保存图片
-    plt.savefig('uncertainty.png')
+    plt.savefig('uncertainty.pdf')
     
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
@@ -379,7 +397,8 @@ def deep_update_dict(fr, to):
             to[k] = v
     return to
 
-# python show_uncertainty.py configs/point-robot.json --gpu 0 --seed 5 --exp_name focal_mix_z0_hvar_p10_weighted --algo_type FOCAL --mujoco_version 200
+# python show_uncertainty.py configs/point-robot.json --gpu 0 --seed 5 --exp_name focal_mix_z0_hvar_p10_weighted --algo_type FOCAL
+# python show_uncertainty.py configs/point-robot.json --gpu 0 --seed 0 --exp_name classifier_mix_z0_hvar_p10_weighted --algo_type CLASSIFIER
 @click.command()
 @click.argument('config', default=None)
 @click.option('--mujoco_version', type=click.Choice(['131', '200'], case_sensitive=False), default='200', help='MuJoCo version, default is --mujoco_version=200')
