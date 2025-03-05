@@ -55,7 +55,8 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         self.train_z0_policy                = kwargs['train_z0_policy']
         self.use_hvar                       = kwargs['use_hvar'] # 是否使用异方差
         self.policy_update_strategy         = kwargs['policy_update_strategy'] # 策略更新 BRAC or TD3BC
-        self.hete_offset                      = kwargs['hete_offset'] # 异方差损失的阈值
+        self.hete_offset                    = kwargs['hete_offset'] # 异方差损失的阈值
+        self.first_path_len                 = kwargs['first_path_len'] # 第一次采样的长度
 
         self.recurrent                      = kwargs['recurrent'] # 是否使用循环编码器
         self.use_relabel                    = kwargs['use_relabel'] # 是否使用重标记
@@ -147,7 +148,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
 
         # 分开训练的训练部分，不更新
         if self.separate_train and not self.pretrain:
-            print(f'*************************Using pretrained agent:{kwargs[algo_type]['pretrained_agent_path']}************************')
+            print(f'*************************Using pretrained agent************************')
             agent_path = Path(kwargs[algo_type]['pretrained_agent_path'])
             if not agent_path.exists():
                 raise ValueError(f"separate_train is True but pretrained_agent_path does not exist: {agent_path}")
@@ -993,7 +994,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         self.qf2_optimizer.zero_grad()
         q1_pred = self.qf1(t, b, obs, actions, task_z.detach())
         q2_pred = self.qf2(t, b, obs, actions, task_z.detach())
-        qf1_loss = torch.mean((q1_pred - q_target) ** 2) # TD error
+        qf1_loss = torch.mean((q1_pred - q_target) ** 2) # TD error: r + gamma * Q(s',a') - Q(s,a)
         qf2_loss = torch.mean((q2_pred - q_target) ** 2)
         qf1_loss.backward(retain_graph=True)
         qf2_loss.backward(retain_graph=True)

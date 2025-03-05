@@ -122,7 +122,7 @@ def plot_tensorboard_data(all_seed_data_dict, tags, plot_type='mean_std', save_p
             axes[i].fill_between(np.arange(len(smoothed_mean)) * (num_train_steps_per_itr / 1000), smoothed_mean - std, smoothed_mean + std, color=color_palette[idx], alpha=0.1)
 
         axes[i].set_title(f'{tag_names[i]}', fontsize=30)
-        axes[i].set_xlabel('Test Steps(1e3)')
+        axes[i].set_xlabel(f'{tag_names[i].split(" ")[-1]} Steps(1e3)')
         axes[i].set_ylabel('Average Return')
         axes[i].grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.5)
         axes[i].legend(loc='lower right', bbox_to_anchor=(1.0, 0.0), frameon=False)
@@ -147,46 +147,40 @@ def visualize_tensorboard(base_dirs, tags=['tag1', 'tag2'], plot_type='mean_std'
 
 if __name__ == '__main__':
     # base_dirs = ['logs/point-robot/FOCAL0135/focal_mix_baseline', 'logs/point-robot/FOCAL0135/focal_mix_z0_hvar_p10_weighted',
-    #              'logs/point-robot/CLASSIFIER034/classifier_mix_baseline', 'logs/point-robot/CLASSIFIER034/classifier_mix_z0_hvar_p10_weighted',
+    #              'logs/point-robot/CLASSIFIER0349/classifier_mix_baseline', 'logs/point-robot/CLASSIFIER0349/classifier_mix_z0_hvar_p10_weighted',
     #              'logs/point-robot/UNICORN1237/unicorn_mix_baseline', 'logs/point-robot/UNICORN1237/unicorn_mix_z0_hvar_weighted',
     #              'logs/point-robot/FOCAL0135/idaq_mix_baseline']
 
-    base_dirs = ['logs/ant-goal/FOCAL0356/focal_mix_baseline', 'logs/ant-goal/FOCAL0356/focal_mix_z0_hvar_p0.1_weighted',
-                 'logs/ant-goal/CLASSIFIER0123/classifier_mix_baseline', 'logs/ant-goal/CLASSIFIER0123/classifier_mix_z0_hvar_p5_weighted',
-                 'logs/ant-goal/UNICORN1234/unicorn_mix_baseline0.1', 'logs/ant-goal/UNICORN1234/unicorn_mix_z0_p2_hvar0.1_weighted',
-                 'logs/ant-goal/FOCAL0356/idaq_mix_baseline_-650'
-                 ]
+    # base_dirs = ['logs/ant-goal/FOCAL0356/focal_mix_baseline', 'logs/ant-goal/FOCAL0356/focal_mix_z0_hvar_p0.1_weighted',
+    #              'logs/ant-goal/CLASSIFIER0123/classifier_mix_baseline', 'logs/ant-goal/CLASSIFIER0123/classifier_mix_z0_hvar_p5_weighted',
+    #              'logs/ant-goal/UNICORN1234/unicorn_mix_baseline0.1', 'logs/ant-goal/UNICORN1234/unicorn_mix_z0_p2_hvar0.1_weighted',
+    #              'logs/ant-goal/FOCAL0356/idaq_mix_baseline_-650']
 
-    # base_dirs = ['logs/cheetah-vel/FOCAL15910/focal_mix_baseline', 'logs/cheetah-vel/FOCAL15910/focal_mix_z0_hvar_p2_weighted',
-    #              'logs/cheetah-vel/CLASSIFIER_0256/classifier_mix_baseline', 'logs/cheetah-vel/CLASSIFIER_0256/classifier_mix_z0_hvar_p10_weighted',
-    #              'logs/cheetah-vel/UNICORN_0123/unicorn_mix_baseline0.5', 'logs/cheetah-vel/UNICORN_0123/unicorn_z0_p0.5_hvar_0.5_weighted',
-    #             #  'logs/cheetah-vel/FOCAL0345/idaq_mix_baseline'
-    #              ]
+    base_dirs = ['logs/cheetah-vel/FOCAL04710/focal_mix_baseline', 'logs/cheetah-vel/FOCAL04710/focal_mix_z0_hvar_p2_weighted',
+                 'logs/cheetah-vel/CLASSIFIER_0256/classifier_mix_baseline', 'logs/cheetah-vel/CLASSIFIER_0256/classifier_mix_z0_hvar_p10_weighted',
+                 'logs/cheetah-vel/UNICORN_0123/unicorn_mix_baseline0.5', 'logs/cheetah-vel/UNICORN_0123/unicorn_z0_p0.5_hvar_0.5_weighted',
+                 'logs/cheetah-vel/FOCAL04710/idaq_mix_baseline']
     
-    # base_dirs = ['logs/walker-rand-params/FOCAL015/focal_mix_baseline', 'logs/walker-rand-params/FOCAL015/focal_mix_z0_hvar_p5_weighted',
+    # base_dirs = ['logs/walker-rand-params/FOCAL0145/focal_mix_baseline', 'logs/walker-rand-params/FOCAL0145/focal_mix_z0_hvar_p5_weighted',
     #              'logs/walker-rand-params/CLASSIFIER0124/classifier_mix_baseline', 'logs/walker-rand-params/CLASSIFIER0124/classifier_mix_z0_hvar_p25_weighted',
     #              'logs/walker-rand-params/UNICORN0123/unicorn_mix_baseline0.5', 'logs/walker-rand-params/UNICORN0123/unicorn_mix_z0_p2_hvar0.5_weighted',
-    #             #  'logs/walker-rand-params/FOCAL015/idaq_mix_baseline'
+    #              'logs/walker-rand-params/FOCAL0145/idaq_mix_baseline_r80'
     #              ]
     
-    # base_dirs = ['logs/hopper-rand-params/FOCAL023/focal_mix_baseline', 'logs/hopper-rand-params/FOCAL023/focal_mix_z0_hvar_p0.5_weighted',
+    # base_dirs = ['logs/hopper-rand-params/FOCAL0257/focal_mix_baseline', 'logs/hopper-rand-params/FOCAL0257/focal_mix_z0_hvar_p0.1_weighted',
     #              'logs/hopper-rand-params/CLASSIFIER0124/classifier_mix_baseline', 'logs/hopper-rand-params/CLASSIFIER0124/classifier_mix_z0_hvar_p10_weighted',
-    #             #  'logs/hopper-rand-params/UNICORN1237/unicorn_mix_baseline0.5', 'logs/hopper-rand-params/UNICORN1237/unicorn_mix_z0_hvar_p2_weighted',
-    #             #  'logs/hopper-rand-params/FOCAL023/idaq_mix_baseline'
+    #              'logs/hopper-rand-params/UNICORN037/unicorn_mix_baseline0.5', 'logs/hopper-rand-params/UNICORN037/unicorn_mix_z0_p2_hvar0.5_weighted',
+    #              'logs/hopper-rand-params/FOCAL0257/idaq_mix_baseline_r140'
     #              ]
-    names = ['focal', 'focal+ours', 'classifier', 'classifier+ours',  'unicorn', 'unicorn+ours', 'idaq']
     
-    tags = [
-            # 'Return/Average_OfflineReturn_all_test_tasks', 'Return/Average_OfflineReturn_all_train_tasks',
-            # 'Return/first_OnlineReturn_all_test_tasks', 'Return/first_OnlineReturn_all_train_tasks',
-            # 'Return/second_OnlineReturn_all_test_tasks', 'Return/second_OnlineReturn_all_train_tasks'
-            ]
-    tag_names = [
-        # "first episode test", "first episode train",
-        # "second episode test", "second episode train"
-        ]
+    names = ['focal', 'focal+ours', 'classifier', 'classifier+ours',  'unicorn', 'unicorn+ours', 'idaq']
+
     plot_type = 'mean_std'  # 可以选择 'mean_std', 'mean' 或 'std'
     save_path = f'{base_dirs[0].split("/")[1]}'
     num_train_steps_per_itr = 1000
     visualize_tensorboard(base_dirs, ['Return/first_OnlineReturn_all_test_tasks'], plot_type, save_path+'1.pdf', names, ["First Episode Test"], num_train_steps_per_itr)
     visualize_tensorboard(base_dirs, ['Return/second_OnlineReturn_all_test_tasks'], plot_type, save_path+'2.pdf', names, ["Second Episode Test"], num_train_steps_per_itr)
+    # visualize_tensorboard(base_dirs, ['Return/first_OnlineReturn_all_train_tasks'], plot_type, save_path+'_train1.pdf', names, ["First Episode Train"], num_train_steps_per_itr)
+    # visualize_tensorboard(base_dirs, ['Return/second_OnlineReturn_all_train_tasks'], plot_type, save_path+'_train2.pdf', names, ["Second Episode Train"], num_train_steps_per_itr)
+    # visualize_tensorboard(base_dirs, ['Return/Average_OfflineReturn_all_test_tasks'], plot_type, save_path+'_offline_test.pdf', names, ["Offline Return Test"], num_train_steps_per_itr)
+    # visualize_tensorboard(base_dirs, ['Return/Average_OfflineReturn_all_train_tasks'], plot_type, save_path+'_offline_train.pdf', names, ["Offline Return Train"], num_train_steps_per_itr)

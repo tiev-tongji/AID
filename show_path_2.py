@@ -402,7 +402,7 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
     ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
     if ptu.gpu_enabled():
         algorithm.to()
-    algorithm.draw_path(variant['algo_params']['num_iterations'], str(log_dir_1), is_baseline=False, min_5 = min_5, max_95 = max_95)
+    algorithm.draw_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = min_5, max_95 = max_95)
 
     algorithm_base.agent.policy.load_state_dict(agent_ckpt_2['policy'])
     algorithm_base.agent.uncertainty_mlp.load_state_dict(agent_ckpt_2['uncertainty_mlp'])
@@ -412,7 +412,7 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
     ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
     if ptu.gpu_enabled():
         algorithm_base.to()
-    algorithm_base.draw_path(variant['algo_params']['num_iterations'], str(log_dir_2), is_baseline=True, min_5 = min_5, max_95 = max_95)
+    algorithm_base.draw_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = min_5, max_95 = max_95)
 
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
@@ -435,7 +435,7 @@ def deep_update_dict(fr, to):
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)
 @click.option('--r_thres', default=None)
 # python show_path2.py configs/point-robot.json --gpu 0 --seed 0 --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
-# python show_path.py configs/point-robot.json --gpu 0 --seed 5 --exp_name focal_mix_baseline --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted --hvar_path ./logs/point-robot/focal_mix_z0_hvar_p10_weighted/seed5/agent.pth 
+# python show_path2.py configs/point-robot.json --gpu 0 --seed 5 --exp_name focal_mix_baseline --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted --hvar_path ./logs/point-robot/focal_mix_z0_hvar_p10_weighted/seed5/agent.pth 
 def main(config, mujoco_version, gpu, seed, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
     variant = default_config
     if config:

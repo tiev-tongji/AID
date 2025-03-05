@@ -25,6 +25,7 @@ default_config = dict(
         eval_deterministic=False, # whether to evaluate the deterministic policy
         policy_update_strategy='BRAC', # choose between 'BRAC' and 'TD3BC'
         hete_offset=10.0, # offset for heteroscedasticity loss
+        first_path_len=None, # length of the first path
 
         # 基本训练参数
         soft_target_tau=0.005, # for SAC target network update

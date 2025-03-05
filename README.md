@@ -48,3 +48,12 @@ Output files will be written to `./output/[ENV]/[EXP NAME]/seed[seed]` where the
 
 ## 
 python show_path.py configs/point-robot.json --gpu 0 --seed 1 --exp_name classifier_mix_z0_hvar_weighted-x --algo_type CLASSIFIER --train_z0_policy true --use_hvar true --z_strategy weighted
+
+TODO:
+### hopper
+python launch_experiment.py configs/hopper-rand-params.json --exp_name idaq_mix_baseline --gpu 6 --seed 0,2,3 --algo_type IDAQ --pretrain false --z_strategy mean --train_z0_policy false --use_hvar false --r_thres ?
+
+### walker
+python launch_experiment.py configs/walker_rand_params.json --exp_name idaq_mix_baseline_r80 --gpu 1 --seed 0,1 --algo_type IDAQ --pretrain false --z_strategy mean --train_z0_policy false --use_hvar false --r_thres 80 --mujoco_version 131
+
+80 100 120?

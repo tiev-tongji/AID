@@ -53,7 +53,7 @@
             "hvar_punish_w": 0.1,
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/hopper-rand-params/pre/focal_mix_baseline_pre/"
+            "pretrained_agent_path": "logs/hopper-rand-params/pre/focal_right_mix_z0_hvar_pre/"
         },
         "CSRO": {
             "use_focal_loss": true,
@@ -70,12 +70,12 @@
             "pretrained_agent_path": "logs/hopper-rand-params/pre/corro_mix_z0_hvar_pre/"
         },
         "UNICORN": {
-            "hvar_punish_w": 0.1,
+            "hvar_punish_w": 2,
             "use_focal_loss": true,
             "use_recon_loss": true,
             "focal_loss_weight": 0.5,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/hopper-rand-params/unicorn_mix_z0_hvar0.5_pre"
+            "pretrained_agent_path": "logs/hopper-rand-params/pre/unicorn_mix_z0_hvar0.5_pre"
         },
         "CLASSIFIER": {
             "hvar_punish_w": 10,
@@ -86,7 +86,7 @@
         "IDAQ": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/hopper-rand-params/pre/focal_mix_z0_no_pose_hvar_pre/"
+            "pretrained_agent_path": "logs/hopper-rand-params/pre/focal_mix_baseline_pre/"
         }
     },
     "util_params": {

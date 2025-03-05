@@ -91,7 +91,7 @@
         "IDAQ": {
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/cheetah-vel/pre/focal_mix_z0_no_pose_hvar_pre"
+            "pretrained_agent_path": "logs/cheetah-vel/pre/focal_mix_baseline_pre"
         }
     },
     "util_params": {

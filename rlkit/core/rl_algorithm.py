@@ -415,7 +415,37 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         offline_all_return = [t[:n] for t in offline_all_return]
 
         return online_final_returns, [online_final_returns_first, online_final_returns_second], online_all_return, online_random_final_returns, [online_random_final_returns_first, online_random_final_returns_second], online_random_all_return, offline_final_returns, offline_all_return
+
+    def _do_eval_z_random_switch(self, indices, epoch, buffer):
+        online_final_returns = []
+        online_final_returns_first = []
+        online_final_returns_second = []
+        online_all_return = []
+        for idx in indices:
+            all_rets = []
+            all_rets_first = []
+            all_rets_second = []
+            for r in range(self.num_evals):
+                paths = self.collect_z_random_switch_online_paths(idx, epoch, r, buffer)
+                paths_first, paths_second = paths[0], paths[1]
+                # all_rets.append([eval_util.get_average_returns([p]) for p in paths])
+                all_rets_first.append([eval_util.get_average_returns([paths_first])])
+                all_rets_second.append([eval_util.get_average_returns([paths_second])])
+                all_rets.append([(eval_util.get_average_returns([paths_first]) + eval_util.get_average_returns([paths_second]))/2])
+            online_final_returns.append(np.mean([a[-1] for a in all_rets]))
+            online_final_returns_first.append(np.mean([a[-1] for a in all_rets_first]))
+            online_final_returns_second.append(np.mean([a[-1] for a in all_rets_second]))
+            # record all returns for the first n trajectories
+            n = min([len(a) for a in all_rets])
+            all_rets = [a[:n] for a in all_rets]
+            all_rets = np.mean(np.stack(all_rets), axis=0) # avg return per nth rollout
+            online_all_return.append(all_rets)
+        n = min([len(t) for t in online_all_return])
+        online_all_return = [t[:n] for t in online_all_return]
+
+        return online_final_returns, [online_final_returns_first, online_final_returns_second], online_all_return
     
+
     # @profile
     def train(self, tb_writer):
         '''
@@ -587,13 +617,15 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_np_zs_{epoch}.png', zs=[online_train_np_zs], subplot_title_lst=[f'online_train_np_zs_{epoch}'])
             # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_np_zs_{epoch}.png', zs=[online_test_np_zs], subplot_title_lst=[f'online_test_np_zs_{epoch}'])
 
-    def draw_path(self, epoch, logdir, is_baseline=False, min_5 = None, max_95 = None):
+    def draw_path(self, epoch, logdir, min_5 = None, max_95 = None, is_z_random_switch=False):
         import matplotlib.patches as patches
         import seaborn as sns
 
         for idx in self.eval_tasks:
-            paths, heterodastic_vars = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
-
+            if is_z_random_switch:
+                paths, heterodastic_vars = self.collect_z_random_switch_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
+            else:
+                paths, heterodastic_vars = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
             fig = plt.figure(figsize=(20, 12))
             sns.set_theme(style="white", font_scale=2.0)
 
@@ -611,8 +643,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             # linestyles = ['-', '--', '-.']
             lines_for_legend = []  # 存储用于显示在图例中的线条
             save_data = []
-            vmin = min_5 if min_5 is not None else np.min(heterodastic_vars)
-            vmax = max_95 if max_95 is not None else np.max(heterodastic_vars)
+            vmin = min_5 if min_5 is not None else np.min(np.concatenate(heterodastic_vars))
+            vmax = max_95 if max_95 is not None else np.max(np.concatenate(heterodastic_vars))
             for i, path in enumerate(paths[:2]):
                 observations = np.array(path['observations'])
                 heterodastic_var = np.array(heterodastic_vars[i])
@@ -668,12 +700,87 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             plt.savefig(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_{idx}.pdf', dpi=400, bbox_inches='tight')
             plt.close()
     
-    def show_return(self, tb_writer, epoch):
+    def show_return(self, tb_writer, epoch, is_last=False):
         if self.tb_writer is None:
             self.tb_writer = tb_writer
-        self.evaluate(epoch)
+        if self.eval_statistics is None:
+            self.eval_statistics = OrderedDict()
+        test_online_final_returns_avg, test_online_final_returns, test_online_all_returns,   test_online_random_final_returns_avg, test_online_random_final_returns, test_online_random_all_returns,   test_offline_final_returns, test_offline_all_returns = self._do_eval(self.eval_tasks, epoch, buffer=self.eval_buffer)
+        train_online_final_returns_avg, train_online_final_returns, train_online_all_returns,   train_online_random_final_returns_avg, train_online_random_final_returns, train_online_random_all_returns,   train_offline_final_returns, train_offline_all_returns = self._do_eval(self.train_tasks, epoch, buffer=self.replay_buffer)
+        
+        test_online_final_returns_fir, test_online_final_returns_sec = test_online_final_returns
+        fir_test_online_final_return = np.mean(test_online_final_returns_fir)
+        sec_test_online_final_return = np.mean(test_online_final_returns_sec)
+        test_online_random_final_returns_fir, test_online_random_final_returns_sec = test_online_random_final_returns
+        fir_test_online_random_final_return = np.mean(test_online_random_final_returns_fir)
+        sec_test_online_random_final_return = np.mean(test_online_random_final_returns_sec)
+        avg_test_offline_final_return = np.mean(test_offline_final_returns)
+
+        train_online_final_returns_fir, train_online_final_returns_sec = train_online_final_returns
+        fir_train_online_final_return = np.mean(train_online_final_returns_fir)
+        sec_train_online_final_return = np.mean(train_online_final_returns_sec)
+        train_online_random_final_returns_fir, train_online_random_final_returns_sec = train_online_random_final_returns
+        fir_train_online_random_final_return = np.mean(train_online_random_final_returns_fir)
+        sec_train_online_random_final_return = np.mean(train_online_random_final_returns_sec)
+        avg_train_offline_final_return = np.mean(train_offline_final_returns)
+        
+        self.eval_statistics['first_OnlineReturn_all_test_tasks'] = fir_test_online_final_return
+        self.eval_statistics['second_OnlineReturn_all_test_tasks'] = sec_test_online_final_return
+        self.eval_statistics['first_OnlineReturn_all_test_tasks_random'] = fir_test_online_random_final_return
+        self.eval_statistics['second_OnlineReturn_all_test_tasks_random'] = sec_test_online_random_final_return
+        self.eval_statistics['Average_OfflineReturn_all_test_tasks'] = avg_test_offline_final_return
+
+        self.eval_statistics['first_OnlineReturn_all_train_tasks'] = fir_train_online_final_return
+        self.eval_statistics['second_OnlineReturn_all_train_tasks'] = sec_train_online_final_return
+        self.eval_statistics['first_OnlineReturn_all_train_tasks_random'] = fir_train_online_random_final_return
+        self.eval_statistics['second_OnlineReturn_all_train_tasks_random'] = sec_train_online_random_final_return
+        self.eval_statistics['Average_OfflineReturn_all_train_tasks'] = avg_train_offline_final_return
+
+        for key, value in self.eval_statistics.items():
+            logger.record_tabular(key, value)
+        self.eval_statistics = None
+
         logger.record_tabular("Epoch", epoch)
         logger.dump_tabular(with_prefix=False, with_timestamp=False, tb_writer = self.tb_writer)
+
+        if is_last and 'point-robot' in self.env_name:
+            print('draw path')
+            self.draw_path(epoch, logger._snapshot_dir+'/tensorboard_' + str(self.first_path_len))
+
+    def show_z_random_switch(self, tb_writer, epoch, is_last=False):
+        if self.tb_writer is None:
+            self.tb_writer = tb_writer
+        if self.eval_statistics is None:
+            self.eval_statistics = OrderedDict()
+        
+        test_online_z_random_switch_returns_avg, test_online_z_random_switch_returns, test_online_all_returns = self._do_eval_z_random_switch(self.eval_tasks, epoch, buffer=self.eval_buffer)
+        train_online_z_random_switch_returns_avg, train_online_z_random_switch_returns, train_online_all_returns = self._do_eval_z_random_switch(self.train_tasks, epoch, buffer=self.replay_buffer)
+
+        test_online_z_random_switch_returns_fir, test_online_z_random_switch_returns_sec = test_online_z_random_switch_returns
+        # avg_test_online_z_random_switch_return = np.mean(test_online_z_random_switch_returns_avg)
+        fir_test_online_z_random_switch_return = np.mean(test_online_z_random_switch_returns_fir)
+        sec_test_online_z_random_switch_return = np.mean(test_online_z_random_switch_returns_sec)
+
+        train_online_z_random_switch_returns_fir, train_online_z_random_switch_returns_sec = train_online_z_random_switch_returns
+        # avg_train_online_z_random_switch_return = np.mean(train_online_z_random_switch_returns_avg)
+        fir_train_online_z_random_switch_return = np.mean(train_online_z_random_switch_returns_fir)
+        sec_train_online_z_random_switch_return = np.mean(train_online_z_random_switch_returns_sec)
+        
+        self.eval_statistics['first_OnlineReturn_all_test_tasks'] = fir_test_online_z_random_switch_return
+        self.eval_statistics['second_OnlineReturn_all_test_tasks'] = sec_test_online_z_random_switch_return
+
+        self.eval_statistics['first_OnlineReturn_all_train_tasks'] = fir_train_online_z_random_switch_return
+        self.eval_statistics['second_OnlineReturn_all_train_tasks'] = sec_train_online_z_random_switch_return
+
+        for key, value in self.eval_statistics.items():
+            logger.record_tabular(key, value)
+        self.eval_statistics = None
+
+        logger.record_tabular("Epoch", epoch)
+        logger.dump_tabular(with_prefix=False, with_timestamp=False, tb_writer = self.tb_writer)
+
+        if is_last and 'point-robot' in self.env_name:
+            self.draw_path(epoch, logger._snapshot_dir+'/tensorboard_z_random_switch', is_z_random_switch=True)
 
     def collect_offline_paths(self, idx, epoch, run, buffer):
         self.task_idx = idx
@@ -690,7 +797,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 max_samples=self.num_steps_per_eval - num_transitions,
                 max_trajs=1,
                 accum_context=True,
-                rollout=True)
+                rollout=True,
+                max_path_length=self.first_path_len if i == 0 else None)
             paths += path
             num_transitions += num
 
@@ -732,7 +840,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.adapt_sampled_z_list = []
         # while num_transitions < self.num_steps_per_eval:
         if self.algo_type == 'IDAQ':
-            for _ in range(2):
+            for i in range(2):
                 if num_trajs < self.num_exp_traj_eval or type(self.agent.context) == type(None): # num_exp_traj_eval = 10 ? 1 TODO
                     sampled_idx = np.random.choice(self.train_tasks)
                     sampled_idx = self.adapt_draw_one_task_from_prior()
@@ -749,7 +857,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 			        is_sparse_reward=self.sparse_rewards,
 			    	reward_models=self.reward_models[:num_models],
                     dynamic_models=self.dynamic_models[:num_models],
-                    update_score=(num_trajs < self.num_exp_traj_eval))
+                    update_score=(num_trajs < self.num_exp_traj_eval),
+                    max_path_length=self.first_path_len if i == 0 else None)
                 paths += path
                 num_transitions += num
                 num_trajs += 1
@@ -764,7 +873,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                     deterministic=self.eval_deterministic,
                     max_samples=np.inf,
                     max_trajs=1,
-                    accum_context=True)
+                    accum_context=True,
+                    max_path_length=self.first_path_len if i == 0 else None)
                 paths += path
                 num_transitions += num
                 heterodastic_var = self.agent.infer_posterior(self.agent.context).squeeze().cpu().numpy()
@@ -779,7 +889,10 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             path['goal'] = goal # goal
         
         if return_heterodastic_var:
-            heterodastic_var_list = np.array_split(heterodastic_var, 2)
+            if self.first_path_len is None:
+                heterodastic_var_list = np.array_split(heterodastic_var, 2)
+            else:
+                heterodastic_var_list = [heterodastic_var[:self.first_path_len], heterodastic_var[self.first_path_len:]]
             return paths, heterodastic_var_list
         else:
             return paths
@@ -798,7 +911,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 max_samples=np.inf,
                 max_trajs=1,
                 accum_context=True,
-                np_online_collect=(i==0))
+                np_online_collect=(i==0),
+                max_path_length=self.first_path_len if i == 0 else None)
             paths += path
             num_transitions += num
             # if num_transitions >= self.num_exp_traj_eval * self.max_path_length and self.agent.context is not None:
@@ -814,7 +928,50 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             path['goal'] = goal # goal
         
         if return_heterodastic_var:
-            heterodastic_var_list = np.array_split(heterodastic_var, 2)
+            if self.first_path_len is None:
+                heterodastic_var_list = np.array_split(heterodastic_var, 2)
+            else:
+                heterodastic_var_list = [heterodastic_var[:self.first_path_len], heterodastic_var[self.first_path_len:]]
+                print(heterodastic_var_list)
+            return paths, heterodastic_var_list
+        else:
+            return paths
+    
+    def collect_z_random_switch_online_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False):
+        self.task_idx = idx
+        self.env.reset_task(idx)
+
+        self.agent.clear_z()
+        paths = []
+        num_transitions = 0
+        num_trajs = 0
+        self.adapt_sampled_z_list = []
+        for i in range(2):
+            path, num = self.sampler.obtain_samples(
+                deterministic=self.eval_deterministic,
+                max_samples=np.inf,
+                max_trajs=1,
+                accum_context=True,
+                z_random=(i==0),
+                max_path_length=self.first_path_len if i == 0 else None)
+            paths += path
+            num_transitions += num
+            heterodastic_var = self.agent.infer_posterior(self.agent.context).squeeze().cpu().numpy()
+
+        if self.sparse_rewards:
+            for p in paths:
+                sparse_rewards = np.stack([e['sparse_reward'] for e in p['env_infos']]).reshape(-1, 1)
+                p['rewards'] = sparse_rewards
+
+        goal = self.env._goal
+        for path in paths:
+            path['goal'] = goal # goal
+        
+        if return_heterodastic_var:
+            if self.first_path_len is None:
+                heterodastic_var_list = np.array_split(heterodastic_var, 2)
+            else:
+                heterodastic_var_list = np.split(heterodastic_var, [self.first_path_len])
             return paths, heterodastic_var_list
         else:
             return paths

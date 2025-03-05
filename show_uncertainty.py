@@ -302,7 +302,7 @@ def show_uncertainty(variant, gpu_id, seed):
     
     elif variant['algo_type'] == 'CLASSIFIER':
         classifier_loss = F.cross_entropy(classifier(train_z), train_labels, reduction='none').detach().cpu().numpy()
-        train_z_var[train_z_var > 0.01] = 0.01
+        # train_z_var[train_z_var > 0.01] = 0.01
         loss = classifier_loss
         loss[loss > 0.01] = 0.01
 
@@ -319,25 +319,26 @@ def show_uncertainty(variant, gpu_id, seed):
     import seaborn as sns
     from matplotlib import rcParams
     rcParams.update({'font.size': 16})
-    fig, ((ax1, ax2), (ax5, ax6)) = plt.subplots(2, 2, figsize=(18, 10), height_ratios=[2.3, 1])
+    # fig, ((ax1, ax2), (ax5, ax6)) = plt.subplots(2, 2, figsize=(18, 10), height_ratios=[2.3, 1])
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 6), gridspec_kw={'width_ratios': [1.2, 1]})
     sns.set_theme(style="white", font_scale=2.0)
 
     ax1.set_xlim(-1.2, 1.2)
     ax1.set_ylim(-0.1, 1.2)
-    ax2.set_xlim(-1.2, 1.2)
-    ax2.set_ylim(-0.1, 1.2)
+    # ax2.set_xlim(-1.2, 1.2)
+    # ax2.set_ylim(-0.1, 1.2)
     ax1.set_frame_on(False)
-    ax2.set_frame_on(False)
+    # ax2.set_frame_on(False)
     half_circle1 = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=2)
     half_circle2 = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=2)
     ax1.add_artist(half_circle1)
-    ax2.add_artist(half_circle2)
+    # ax2.add_artist(half_circle2)
     ax1.set_aspect('equal')
-    ax2.set_aspect('equal')
+    # ax2.set_aspect('equal')
     ax1.set_xticks([])  # 去掉 x 轴刻度
     ax1.set_yticks([])  # 去掉 y 轴刻度
-    ax2.set_xticks([])  # 去掉 x 轴刻度
-    ax2.set_yticks([])  # 去掉 y 轴刻度
+    # ax2.set_xticks([])  # 去掉 x 轴刻度
+    # ax2.set_yticks([])  # 去掉 y 轴刻度
 
     # 绘制训练数据的散点热力图
     sample_ids = np.random.choice(len(obs_train_lst), 1000, replace=False)
@@ -346,40 +347,40 @@ def show_uncertainty(variant, gpu_id, seed):
         z_var = train_z_var[i]
         loss_i = loss[i]
         # 根据 z_var 大小设置热力图颜色
-        # z_var_color = plt.cm.coolwarm(z_var / train_z_var.max())
-        # loss_color = plt.cm.coolwarm(loss_i / loss.max())
-        z_var_color = plt.cm.coolwarm((z_var - train_z_var.min()) / (train_z_var.max() - train_z_var.min()))  # 应用颜色映射
-        loss_color = plt.cm.coolwarm((loss_i - (loss.min())) / (loss.max() - (loss.min())))
+        z_var_color = plt.cm.coolwarm(z_var / 0.01)
+        loss_color = plt.cm.coolwarm(loss_i / loss.max())
+        # z_var_color = plt.cm.coolwarm((z_var - train_z_var.min()) / (0.01 - train_z_var.min()))  # 应用颜色映射
+        # loss_color = plt.cm.coolwarm((loss_i - (loss.min())) / (loss.max() - (loss.min())))
         ax1.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=z_var_color, s=10)
-        ax2.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=loss_color, s=10)
+        # ax2.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=loss_color, s=10)
         # if z_var >= train_z_var.min() + 0.1 * (train_z_var.max() - train_z_var.min()):
         #     ax3.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=z_var_color, s=10)
         # if loss_i >= loss.min() + 0.1 * (loss.max() - (loss.min())):
         #     ax4.scatter(obs_train_lst[i][0], obs_train_lst[i][1], c=loss_color, s=10)
 
     # 为 ax1 和 ax2 设置热力图颜色条
-    sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=plt.Normalize(vmin=train_z_var.min(), vmax=train_z_var.max()))
+    sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=plt.Normalize(vmin=0, vmax=train_z_var.max()))
     sm.set_array([])
-    fig.colorbar(sm, ax=ax1, orientation='horizontal')
+    fig.colorbar(sm, ax=ax1, fraction=0.05, pad=0.1, shrink=1.0, aspect=23, orientation='horizontal')
 
-    sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=plt.Normalize(vmin=loss.min(), vmax=loss.max()))
-    sm.set_array([])
-    fig.colorbar(sm, ax=ax2, orientation='horizontal') 
+    # sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=plt.Normalize(vmin=loss.min(), vmax=loss.max()))
+    # sm.set_array([])
+    # fig.colorbar(sm, ax=ax2, orientation='horizontal') 
+    # fig.suptitle('Uncertainty')
+    # ax1.set_title('Uncertainty Distribution in State Space')
+    # ax2.set_title('Uncertainty Histogram')
 
-    ax1.set_title('Train Uncertainty')
-    ax2.set_title('Loss')
-
-    ax5.set_xlabel('value')
-    ax5.set_ylabel('count')
-    ax6.set_xlabel('value')
-    ax6.set_ylabel('count')
+    ax1.title.set_position([0.5, 1.1])
+    ax2.title.set_position([0.5, 1.1])
+    ax2.set_xlabel('value')
+    ax2.set_ylabel('count')
+    # ax6.set_xlabel('value')
+    # ax6.set_ylabel('count')
 
     # 画z_var的分布直方图
     # Create histograms with different colors for each bin and black edges
-    train_hist, train_bins, _ = ax5.hist(train_z_var, bins=10, alpha=0.5, label='train', edgecolor='black')
-    eval_hist, eval_bins, _ = ax6.hist(loss, bins=10, alpha=0.5, label='loss', edgecolor='black')
-    print(f'eval_hist: {eval_hist}')
-    print(f'eval_bins: {eval_bins}')
+    train_hist, train_bins, _ = ax2.hist(train_z_var, bins=10, alpha=0.5, label='train', edgecolor='black')
+    # eval_hist, eval_bins, _ = ax6.hist(loss, bins=10, alpha=0.5, label='loss', edgecolor='black')
 
     # plt.suptitle(f"{variant['util_params']['exp_name']}", fontsize=16)
 
@@ -398,7 +399,7 @@ def deep_update_dict(fr, to):
     return to
 
 # python show_uncertainty.py configs/point-robot.json --gpu 0 --seed 5 --exp_name focal_mix_z0_hvar_p10_weighted --algo_type FOCAL
-# python show_uncertainty.py configs/point-robot.json --gpu 0 --seed 0 --exp_name classifier_mix_z0_hvar_p10_weighted --algo_type CLASSIFIER
+# python show_uncertainty.py configs/point-robot.json --gpu 0 --seed 0 --exp_name CLASSIFIER0349/classifier_mix_z0_hvar_p10_weighted --algo_type CLASSIFIER
 @click.command()
 @click.argument('config', default=None)
 @click.option('--mujoco_version', type=click.Choice(['131', '200'], case_sensitive=False), default='200', help='MuJoCo version, default is --mujoco_version=200')

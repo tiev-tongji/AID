@@ -201,7 +201,10 @@ class PEARLAgent(nn.Module):
         selected_params = params[batch_indices, selected_indices]  # [task, selected_range, latent_dim] [10, 1024, 20]
         self.z_quantile = selected_params.mean(dim=1)  # [task, latent_dim]
 
-        self.z_vars = torch.std(params, dim=1)
+        if params.size(1) > 1:
+            self.z_vars = torch.std(params, dim=1)
+        else:
+            self.z_vars = torch.zeros(params.size(0))
         self.sample_z()
         
         return heterodastic_var

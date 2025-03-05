@@ -74,7 +74,7 @@
             "use_recon_loss": true,
             "focal_loss_weight": 0.1,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/ant-goal/unicorn_mix_baseline0.1_pre"
+            "pretrained_agent_path": "logs/ant-goal/pre/unicorn_mix_z0_hvar0.1_pre"
         },
         "CLASSIFIER": {
             "hvar_punish_w": 5,

@@ -20,6 +20,7 @@
         "embedding_batch_size": 1024,
         "embedding_mini_batch_size": 1024,
         "max_path_length": 20,
+        "first_path_len": 20,
         "discount": 0.90,
         "reward_scale": 100.0,
         "sparse_rewards": 0,

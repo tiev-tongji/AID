@@ -285,8 +285,7 @@ def rollout(env, agent, max_path_length=np.inf, accum_context=True, update_z_per
     )
 
 def np_online_rollout(env, agent, max_path_length=np.inf, accum_context=True, update_z_per_step=False, animated=False, save_frames=False, use_np_online_decay=False, 
-                    init_num=0, 
-                    decay_function=None):
+                    init_num=0, decay_function=None):
     """
     The following value for the following keys will be a 2D array, with the
     first dimension corresponding to the time dimension.
@@ -538,6 +537,76 @@ def ensemble_rollout(env, agent, max_path_length=np.inf, accum_context=True, is_
         # prediction_errors=prediction_errors
     )
 
+def z_random_switch_rollout(env, agent, max_path_length=np.inf, accum_context=True, update_z_per_step=False, animated=False, save_frames=False):
+    observations = []
+    actions = []
+    rewards = []
+    terminals = []
+    agent_infos = []
+    env_infos = []
+    o = env.reset()
+    next_o = None
+    path_length = 0
+    action_size = env.action_space.shape[0]
+
+    if animated:
+        env.render()
+    while path_length < max_path_length:
+        a_noise = np.random.uniform(-1,1,action_size)
+        if path_length % 2 == 1:
+            a, agent_info = agent.get_action(o)
+        else:
+            a = a_noise
+            agent_info = {}
+        next_o, r, d, env_info = env.step(a)
+
+        if callable(getattr(env, "sparsify_rewards", None)):
+            env_info = {'sparse_reward': env.sparsify_rewards(r)}
+        # update the agent's current context
+        if accum_context:
+            agent.update_context([o, a, r, next_o, d, env_info])
+        if update_z_per_step:
+            agent.infer_posterior(agent.context)
+        observations.append(o)
+        rewards.append(r)
+        terminals.append(d)
+        actions.append(a)
+        agent_infos.append(agent_info)
+        path_length += 1
+        o = next_o
+        if animated:
+            env.render()
+        if save_frames:
+            from PIL import Image
+            image = Image.fromarray(np.flipud(env.get_image()))
+            env_info['frame'] = image
+        env_infos.append(env_info)
+        if d:
+            break
+
+    actions = np.array(actions)
+    if len(actions.shape) == 1:
+        actions = np.expand_dims(actions, 1)
+    observations = np.array(observations)
+    if len(observations.shape) == 1:
+        observations = np.expand_dims(observations, 1)
+        next_o = np.array([next_o])
+    next_observations = np.vstack(
+        (
+            observations[1:, :],
+            np.expand_dims(next_o, 0)
+        )
+    )
+    return dict(
+        observations=observations,
+        actions=actions,
+        rewards=np.array(rewards).reshape(-1, 1),
+        next_observations=next_observations,
+        terminals=np.array(terminals).reshape(-1, 1),
+        agent_infos=agent_infos,
+        env_infos=env_infos,
+    )
+
 def split_paths(paths):
     """
     Stack multiples obs/actions/etc. from different paths
@@ -562,7 +631,6 @@ def split_paths(paths):
     assert len(actions.shape) == 2
     assert len(next_obs.shape) == 2
     return rewards, terminals, obs, actions, next_obs
-
 
 def split_paths_to_dict(paths):
     rewards, terminals, obs, actions, next_obs = split_paths(paths)
