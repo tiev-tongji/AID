@@ -18,6 +18,7 @@ from tensorboardX import SummaryWriter
 import numpy as np
 np.int = int  # 动态修复 np.int 被废弃的问题
 
+# export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64/:/home/autolab/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04:/home/autolab/.mujoco/mujoco200/bin:/usr/lib/nvidia
 
 mujoco_version = '200'  # 默认版本
 if '--mujoco_version' in sys.argv:
@@ -125,7 +126,8 @@ def experiment(gpu_id, variant, seed=None):
 
     uncertainty_mlp = MlpDecoder(
         hidden_sizes=[net_size],
-        input_size=latent_dim,
+        # input_size=latent_dim,
+        input_size=context_encoder_input_dim,
         output_size=1,
     )
 
@@ -173,11 +175,14 @@ def experiment(gpu_id, variant, seed=None):
     )
 
     agent = PEARLAgent(
-        latent_dim,
         context_encoder,
         uncertainty_mlp,
+        context_decoder,
         policy,
-        **variant['algo_params']
+        **variant['algo_params'],
+        latent_dim=latent_dim,
+        obs_dim=obs_dim,
+        action_dim=action_dim,
     )
 
     # Setting up tasks
@@ -195,7 +200,7 @@ def experiment(gpu_id, variant, seed=None):
         env=env,
         train_tasks=train_tasks,
         eval_tasks=eval_tasks,
-        nets=[agent, qf1, qf2, vf, c, club_model, context_decoder, classifier, reward_models, dynamic_models],
+        nets=[agent, qf1, qf2, vf, c, club_model, classifier, reward_models, dynamic_models],
         latent_dim=latent_dim,
         goal_radius=goal_radius,
         seed=seed,

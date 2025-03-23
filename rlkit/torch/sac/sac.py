@@ -103,6 +103,8 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         params = kwargs[algo_type]
         self.hvar_punish_w                  = params['hvar_punish_w']
         self.use_recon_loss                 = params['use_recon_loss']
+        if self.use_hvar: # TODO
+            self.use_recon_loss = True
         self.recon_loss_weight              = params['recon_loss_weight']
 
         self.use_focal_loss                 = params['use_focal_loss']
@@ -135,7 +137,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         self.hvar_loss                      = nn.MSELoss()
         self.cross_entropy_loss             = nn.CrossEntropyLoss()
 
-        self.qf1, self.qf2, _, _, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models = nets[1:]
+        self.qf1, self.qf2, _, _, self.club_model, self.classifier, self.reward_models, self.dynamic_models = nets[1:]
         if self.policy_update_strategy == 'BRAC':
             self.vf                             = nets[3]
             self.target_vf                      = self.vf.copy()
@@ -161,17 +163,13 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
             agent_ckpt = torch.load(str(agent_path))
             self.agent.context_encoder.load_state_dict(agent_ckpt['context_encoder'])
             self.agent.uncertainty_mlp.load_state_dict(agent_ckpt['uncertainty_mlp'])
+            self.agent.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
             if algo_type == 'CSRO':
                 self.club_model.load_state_dict(agent_ckpt['club_model'])
             if algo_type == 'CLASSIFIER':
                 self.classifier.load_state_dict(agent_ckpt['classifier'])
             if algo_type == 'CROO':
-                self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
                 self.club_model.load_state_dict(agent_ckpt['club_model'])
-            if algo_type == 'UNICORN':
-                self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
-            if algo_type == 'RECON':
-                self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
 
         self.qf1_optimizer                  = optimizer_class(self.qf1.parameters(), lr=self.qf_lr)
         self.qf2_optimizer                  = optimizer_class(self.qf2.parameters(), lr=self.qf_lr)
@@ -179,8 +177,6 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
             self.vf_optimizer                   = optimizer_class(self.vf.parameters(),  lr=self.vf_lr)
             self.c_optimizer                    = optimizer_class(self.c.parameters(),   lr=self.c_lr)
         self.club_model_optimizer           = optimizer_class(self.club_model.parameters(), lr=self.context_lr)
-        # self.behavior_encoder_optimizer     = optimizer_class(self.behavior_encoder.parameters(), lr=self.context_lr)
-        self.context_decoder_optimizer      = optimizer_class(self.context_decoder.parameters(), lr=self.context_lr)
         self.classifier_optimizer           = optimizer_class(self.classifier.parameters(), lr=self.context_lr)
         self.reward_models_optimizer = optimizer_class(self.reward_models.parameters(), lr=self.qf_lr)
         self.dynamic_models_optimizer = optimizer_class(self.dynamic_models.parameters(), lr=self.qf_lr)
@@ -188,6 +184,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         self.policy_optimizer               = optimizer_class(self.agent.policy.parameters(), lr=self.policy_lr)
         self.uncertainty_mlp_optimizer      = optimizer_class(self.agent.uncertainty_mlp.parameters(), lr=self.context_lr)
         self.context_encoder_optimizer      = optimizer_class(self.agent.context_encoder.parameters(), lr=self.context_lr)
+        self.context_decoder_optimizer      = optimizer_class(self.agent.context_decoder.parameters(), lr=self.context_lr)
 
         self._num_steps                     = 0
         self._visit_num_steps_train         = 10
@@ -197,9 +194,9 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
     @property
     def networks(self):
         if self.policy_update_strategy == 'BRAC':
-            return self.agent.networks + [self.qf1, self.qf2, self.vf, self.target_vf, self.c, self.club_model, self.context_decoder, self.classifier]
+            return self.agent.networks + [self.qf1, self.qf2, self.vf, self.target_vf, self.c, self.club_model, self.classifier]
         elif self.policy_update_strategy == 'TD3BC':
-            return self.agent.networks + [self.qf1, self.qf2, self.target_qf1, self.target_qf2, self.club_model, self.context_decoder, self.classifier]
+            return self.agent.networks + [self.qf1, self.qf2, self.target_qf1, self.target_qf2, self.club_model, self.classifier]
 
     @property
     def get_alpha(self):
@@ -212,18 +209,18 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
                 net.train(mode)
         elif self.separate_train and self.pretrain:
             self.club_model.train(mode)
-            self.context_decoder.train(mode)
             self.classifier.train(mode)
             self.agent.uncertainty_mlp.train(mode)
             self.agent.context_encoder.train(mode)
+            self.agent.context_decoder.train(mode)
         elif self.separate_train and not self.pretrain:
             for net in self.networks:
                 net.train(mode)
             self.club_model.eval()
-            self.context_decoder.eval()
             self.classifier.eval()
             self.agent.uncertainty_mlp.eval()
             self.agent.context_encoder.eval()
+            self.agent.context_decoder.eval()
 
     def to(self, device=None):
         if device == None:
@@ -362,7 +359,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         obs, actions, rewards, next_obs, terms = self.sample_sac(indices)
 
         # run inference in networks
-        policy_outputs, task_z, task_z_vars = self.agent(obs, context, task_indices=indices)
+        policy_outputs, task_z, task_z_vars = self.agent(obs, context, task_indices=indices, is_mean=True)
         new_actions, policy_mean, policy_log_std, log_pi = policy_outputs[:4]
 
         # flattens out the task dimension
@@ -417,8 +414,8 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
             assert not torch.isinf(behavior_z_probs).any(), "behavior_z_probs contains infinite values"
         # construct (s,z,a)
         s_z_a = torch.cat([context[..., :self.obs_dim], latent_z, context[..., self.obs_dim:self.obs_dim+self.action_dim]], dim=-1)
-        pre_r_ns_param = self.context_decoder(s_z_a)
-        split_size = int(self.context_decoder.output_size/2)
+        pre_r_ns_param = self.agent.context_decoder(s_z_a)
+        split_size = int(self.agent.context_decoder.output_size/2)
         pre_r_ns_mean = pre_r_ns_param[..., :split_size]
         pre_r_ns_var = F.softplus(pre_r_ns_param[..., split_size:])
         # 检查 pre_r_ns_param, pre_r_ns_mean 和 pre_r_ns_var
@@ -468,15 +465,18 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         croo_loss = -torch.mean(croo_loss)
         return croo_loss, recon_loss, neg_recon_loss
 
-    def Recon_loss(self, context, epsilon=1e-8):
+    def Recon_loss(self, context, epsilon=1e-8, is_detach = False):
         mb, b, _ = context.shape
         # construct (s,z,a)
         r_ns = context[..., self.obs_dim+self.action_dim:]
         # task_z = task_z.unsqueeze(1).expand(-1, context.shape[1], -1) # (mb, b, z_dim) [2560, 20], b = 1024
         latent_z = self.agent.encode_no_mean(context).expand(mb, b, -1) # [10, 1024, 20]
         s_z_a = torch.cat([context[..., : self.obs_dim], latent_z, context[..., self.obs_dim : self.obs_dim + self.action_dim]], dim=-1) # [10, 1024, *]
-        pre_r_ns_param = self.context_decoder(s_z_a)
-        split_size = int(self.context_decoder.output_size/2)
+        if is_detach:
+            pre_r_ns_param = self.agent.context_decoder(s_z_a.detach())
+        else:
+            pre_r_ns_param = self.agent.context_decoder(s_z_a)
+        split_size = int(self.agent.context_decoder.output_size/2)
         pre_r_ns_mean = pre_r_ns_param[..., :split_size]
         pre_r_ns_var = F.softplus(pre_r_ns_param[..., split_size:])
         # 计算高斯
@@ -490,7 +490,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         # task_z = task_z.unsqueeze(1).expand(-1, context.shape[1], -1) # (mb, b, z_dim) [2560, 20], b = 1024
         latent_z = self.agent.encode_no_mean(context).expand(mb, b, -1) # [10, 1024, 20]
         s_z_a = torch.cat([context[..., : self.obs_dim], latent_z, context[..., self.obs_dim : self.obs_dim + self.action_dim]], dim=-1) # [10, 1024, *]
-        pre_r_ns = self.context_decoder(s_z_a)
+        pre_r_ns = self.agent.context_decoder(s_z_a)
         return F.mse_loss(r_ns, pre_r_ns)
 
     def FOCAL_z_loss(self, indices, context, epsilon=1e-3):
@@ -519,7 +519,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         logits = self.classifier(latent_z)
         cross_entropy_loss = torch.nn.CrossEntropyLoss()
         loss = cross_entropy_loss(logits, target_one_hot).view(-1, 1)
-        return loss
+        return loss.squeeze()
 
     # InfoNCE
     # Unlike the infoNCE in CORRO which the x^* = (s,a,r*,s*), we use x^* = (s*,a*,r*,s*)
@@ -573,18 +573,8 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         return model_loss
 
     def HeteroscedasticLoss(self, context, loss):
-        latent_z = self.agent.encode_no_mean(context).view(-1, self.latent_dim)
-        heteroscedastic_var = torch.mean(F.softplus(self.agent.uncertainty_mlp(latent_z.detach())))
-        if self.algo_type == 'UNICORN' or self.algo_type == 'RECON':
-            heteroscedastic_loss = max(1e-4, loss + self.hete_offset)/(2 * heteroscedastic_var) + torch.log(heteroscedastic_var**0.5)
-        else:
-            heteroscedastic_loss = max(1e-4, loss)/(2 * heteroscedastic_var) + torch.log(heteroscedastic_var**0.5)
-        return heteroscedastic_loss, heteroscedastic_var
-    
-    def HeteroscedasticLoss2(self, context, loss):
-        latent_z = self.agent.encode_no_mean(context).view(-1, self.latent_dim)
-        heteroscedastic_var = torch.mean(F.softplus(self.agent.uncertainty_mlp(latent_z.detach())))
-        heteroscedastic_loss = self.hvar(loss, heteroscedastic_var)
+        heteroscedastic_var = torch.mean(F.softplus(self.agent.uncertainty_mlp(context)))
+        heteroscedastic_loss = max(1e-4, loss)/(2 * heteroscedastic_var) + torch.log(heteroscedastic_var**0.5)
         return heteroscedastic_loss, heteroscedastic_var
 
     def _take_step(self, indices, context):
@@ -633,16 +623,27 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
                 self.eval_statistics['Heteroscedastic Var'] = self.loss["heteroscedastic_var"]
             if self.loss.get("heteroscedastic_loss") is not None:
                 self.eval_statistics['Heteroscedastic Loss'] = self.loss["heteroscedastic_loss"]
+            elif self.use_hvar:
+                self.eval_statistics['Heteroscedastic Loss'] = torch.mean(F.softplus(self.agent.uncertainty_mlp(context.detach()))).item()
+                
             if self.loss.get("focal_loss") is not None:
                 self.eval_statistics['FOCAL Loss'] = self.loss["focal_loss"]
+            
             if self.loss.get("classify_loss") is not None:
                 self.eval_statistics['CLASSIFY Loss'] = self.loss["classify_loss"]
+            elif self.use_classify_loss:
+                self.eval_statistics['CLASSIFY Loss'] = self.CLASSIFY_loss(indices, context).item()
+            
             if self.loss.get("club_loss") is not None:
                 self.eval_statistics['CLUB Loss'] = self.loss["club_loss"]
             if self.loss.get("croo_loss") is not None:
                 self.eval_statistics['CROO Loss'] = self.loss["croo_loss"]
+            
             if self.loss.get("recon_loss") is not None:
                 self.eval_statistics['Recon Loss'] = self.loss["recon_loss"]
+            elif self.use_recon_loss:
+                self.eval_statistics['Recon Loss'] = self.Recon_loss(context.detach()).item()
+            
             if self.loss.get("infoNCE_loss") is not None:
                 self.eval_statistics['infoNCE Loss'] = self.loss["infoNCE_loss"]
             if self.loss.get("total_loss") is not None:
@@ -699,66 +700,99 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
 
         # 计算损失函数
         total_loss = 0
-        if self.use_club_loss:
-            club_loss = self.CLUB_loss(context)
-            self.loss["club_loss"] = club_loss.item()
-            total_loss += self.club_loss_weight * club_loss
-        if self.use_focal_loss:
-            focal_z_loss = self.FOCAL_z_loss(indices, context)
-            self.loss["focal_loss"] = focal_z_loss.item()
-            total_loss += self.focal_loss_weight * focal_z_loss
-        if self.use_recon_loss:
-            recon_loss = self.Recon_loss(context)
-            self.loss["recon_loss"] = recon_loss.item()
-            total_loss += self.recon_loss_weight * recon_loss
-        if self.use_classify_loss:
+        hetero_loss = 0
+        # if self.use_club_loss:
+        #     club_loss = self.CLUB_loss(context)
+        #     self.loss["club_loss"] = club_loss.item()
+        #     total_loss += self.club_loss_weight * club_loss
+        if self.algo_type == 'CLASSIFIER':
             classify_loss = self.CLASSIFY_loss(indices, context)
             self.loss["classify_loss"] = classify_loss.item()
             total_loss += self.classify_loss_weight * classify_loss
-        if self.use_croo_loss:
-            croo_loss, recon_loss, neg_recon_loss = self.CROO_loss(indices, context)
-            self.loss["croo_loss"] = croo_loss.item()
+            hetero_loss += self.classify_loss_weight * classify_loss
+            
+            recon_loss = self.Recon_loss(context, is_detach=True)
             self.loss["recon_loss"] = recon_loss.item()
-            self.loss["neg_recon_loss"] = neg_recon_loss.item()
-            total_loss += self.croo_loss_weight * croo_loss
-        if self.use_infoNCE_loss:
-            infoNCE_loss = self.infoNCE_loss(indices, context)
-            self.loss["infoNCE_loss"] = infoNCE_loss.item()
-            total_loss += self.infoNCE_loss_weight*infoNCE_loss
+            recon_loss.backward()
+            self.context_decoder_optimizer.step()
+            
+            total_loss.backward() # CLASSIFIER loss
+            self.classifier_optimizer.step()
+            self.context_encoder_optimizer.step()
+        elif self.algo_type == 'UNICORN':
+            focal_z_loss = self.FOCAL_z_loss(indices, context)
+            self.loss["focal_loss"] = focal_z_loss.item()
+            total_loss += self.focal_loss_weight * focal_z_loss
+            hetero_loss += self.focal_loss_weight * focal_z_loss
+            
+            recon_loss = self.Recon_loss(context, is_detach=True)
+            self.loss["recon_loss"] = recon_loss.item()
+            total_loss += self.recon_loss_weight * recon_loss
+            
+            total_loss.backward() # FOCAL loss + RECON loss
+            self.context_encoder_optimizer.step()
+            self.context_decoder_optimizer.step()
+        elif self.algo_type == 'FOCAL':
+            focal_z_loss = self.FOCAL_z_loss(indices, context)
+            self.loss["focal_loss"] = focal_z_loss.item()
+            total_loss += self.focal_loss_weight * focal_z_loss
+            hetero_loss += self.focal_loss_weight * focal_z_loss
+            
+            if self.use_recon_loss:
+                recon_loss = self.Recon_loss(context)
+                self.loss["recon_loss"] = recon_loss.item()
+                recon_loss.backward()
+                self.context_decoder_optimizer.step()
+            
+            total_loss.backward() # FOCAL loss
+            self.context_encoder_optimizer.step()
+        
+        self.loss["total_loss"] = total_loss.item()
+        
+        # if self.use_focal_loss:
+        #     focal_z_loss = self.FOCAL_z_loss(indices, context)
+        #     self.loss["focal_loss"] = focal_z_loss.item()
+        #     total_loss += self.focal_loss_weight * focal_z_loss
+        #     hetero_loss += self.focal_loss_weight * focal_z_loss
+        # if self.use_recon_loss:
+        #     if self.algo_type == 'CLASSIFIER':
+        #         recon_loss = self.Recon_loss(context.detach())
+        #     else:
+        #         recon_loss = self.Recon_loss(context)
+        #     self.loss["recon_loss"] = recon_loss.item()
+        #     total_loss += self.recon_loss_weight * recon_loss
+        # if self.use_classify_loss:
+        #     classify_loss = self.CLASSIFY_loss(indices, context)
+        #     self.loss["classify_loss"] = classify_loss.item()
+        #     total_loss += self.classify_loss_weight * classify_loss
+        #     hetero_loss += self.classify_loss_weight * classify_loss
+        # # if self.use_croo_loss:
+        # #     croo_loss, recon_loss, neg_recon_loss = self.CROO_loss(indices, context)
+        # #     self.loss["croo_loss"] = croo_loss.item()
+        # #     self.loss["recon_loss"] = recon_loss.item()
+        # #     self.loss["neg_recon_loss"] = neg_recon_loss.item()
+        # #     total_loss += self.croo_loss_weight * croo_loss
+        # # if self.use_infoNCE_loss:
+        # #     infoNCE_loss = self.infoNCE_loss(indices, context)
+        # #     self.loss["infoNCE_loss"] = infoNCE_loss.item()
+        # #     total_loss += self.infoNCE_loss_weight*infoNCE_loss
 
-        # 计算异方差损失
+        # # 训练encoder
+        # total_loss.backward()
+        # self.loss["total_loss"] = total_loss.item()
+        # self.context_encoder_optimizer.step()
+        # if self.use_recon_loss or self.use_croo_loss: # CROO UNICORN RECON FOCAL
+        #     self.context_decoder_optimizer.step()
+        # if self.use_classify_loss: # CLASSIFIER
+        #     self.classifier_optimizer.step()
+
+        # 训练异方差网络
         if self.use_hvar:
-            # if self.algo_type == 'UNICORN' or self.algo_type == 'RECON':
-            # if 0:
-            #     total_loss.backward()
-            #     self.context_encoder_optimizer.step()
-            #     if self.algo_type == 'CLASSIFIER': # CLASSIFIER
-            #         self.classifier_optimizer.step()
-            #     if self.algo_type == 'CROO' or self.algo_type == 'UNICORN' or self.algo_type == 'RECON': # CROO UNICORN RECON
-            #         self.context_decoder_optimizer.step()
-            #     heteroscedastic_loss, heteroscedastic_var = self.HeteroscedasticLoss(context, total_loss.detach())
-            #     heteroscedastic_loss.backward()
-            #     self.uncertainty_mlp_optimizer.step()
-            # else:
-            heteroscedastic_loss, heteroscedastic_var = self.HeteroscedasticLoss(context, total_loss)
+            heteroscedastic_loss, heteroscedastic_var = self.HeteroscedasticLoss(context, hetero_loss.detach())
             heteroscedastic_loss.backward()
             self.uncertainty_mlp_optimizer.step()
-            self.context_encoder_optimizer.step()
-            if self.algo_type == 'CLASSIFIER': # CLASSIFIER
-                self.classifier_optimizer.step()
-            if self.algo_type == 'CROO' or self.algo_type == 'UNICORN' or self.algo_type == 'RECON': # CROO UNICORN RECON
-                self.context_decoder_optimizer.step()
             self.loss["heteroscedastic_var"] = heteroscedastic_var.item()
             self.loss["heteroscedastic_loss"] = heteroscedastic_loss.item()
-        else:
-            total_loss.backward()
-            self.uncertainty_mlp_optimizer.step()
-            self.context_encoder_optimizer.step()
-            if self.algo_type == 'CLASSIFIER': # CLASSIFIER
-                self.classifier_optimizer.step()
-            if self.algo_type == 'CROO' or self.algo_type == 'UNICORN' or self.algo_type == 'RECON': # CROO UNICORN RECON
-                self.context_decoder_optimizer.step()
-        self.loss["total_loss"] = total_loss.item()
 
     def _update_policy_use_BRAC(self, indices, context):
         """
@@ -766,7 +800,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         使用 BRAC 算法
         """
         obs, actions, rewards, next_obs, terms = self.sample_sac(indices)
-        policy_outputs, task_z, task_z_vars = self.agent(obs, context, task_indices=indices)
+        policy_outputs, task_z, task_z_vars = self.agent(obs, context, task_indices=indices, is_mean=True)
         new_actions, policy_mean, policy_log_std, log_pi = policy_outputs[:4]
 
         # flattens out the task dimension
@@ -835,7 +869,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
                 transitions = torch.cat([obs, actions, rewards, next_obs], dim=-1)
             else:
                 transitions = torch.cat([obs, actions, rewards], dim=-1)
-            transition_heterodastic_var = F.softplus(self.agent.uncertainty_mlp(self.agent.encode_no_mean(transitions))).detach()
+            transition_heterodastic_var = F.softplus(self.agent.uncertainty_mlp(transitions)).detach()
             self.loss["heteroscedastic_var"] = torch.mean(transition_heterodastic_var).item()
             transition_heterodastic_var_flat = transition_heterodastic_var.view(self.batch_size * len(indices), -1)
             var0 = ptu.zeros_like(transition_heterodastic_var_flat)
@@ -934,10 +968,10 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         """
         obs, actions, rewards, next_obs, terms = self.sample_sac(indices)
 
-        policy_outputs, task_z, task_z_vars = self.agent(obs, context, task_indices=indices)
+        policy_outputs, task_z, task_z_vars = self.agent(obs, context, task_indices=indices, is_mean=True)
         new_actions, policy_mean, policy_log_std, log_pi = policy_outputs[:4]
 
-        next_policy_outputs, next_task_z, next_task_z_vars = self.agent(next_obs, context, task_indices=indices)
+        next_policy_outputs, next_task_z, next_task_z_vars = self.agent(next_obs, context, task_indices=indices, is_mean=True)
         next_new_actions, _, _, _ = next_policy_outputs[:4]
 
         # flattens out the task dimension
@@ -1030,33 +1064,34 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         # NOTE: overriding parent method which also optionally saves the env
         if self.policy_update_strategy == 'BRAC':
             snapshot = OrderedDict(
+                epoch=epoch,
                 qf1=self.qf1.state_dict(),
                 qf2=self.qf2.state_dict(),
                 vf=self.vf.state_dict(),
                 target_vf=self.target_vf.state_dict(),
                 c=self.c.state_dict(),
                 club_model=self.club_model.state_dict(),
-                context_decoder=self.context_decoder.state_dict(),
                 classifier=self.classifier.state_dict(),
                 policy=self.agent.policy.state_dict(),
                 uncertainty_mlp=self.agent.uncertainty_mlp.state_dict(),
                 context_encoder=self.agent.context_encoder.state_dict(),
-
+                context_decoder=self.agent.context_decoder.state_dict(),
                 )
         elif self.policy_update_strategy == 'TD3BC':
             snapshot = OrderedDict(
+                epoch=epoch,
                 qf1=self.qf1.state_dict(),
                 qf2=self.qf2.state_dict(),
                 target_qf1=self.target_qf1.state_dict(),
                 target_qf2=self.target_qf2.state_dict(),
                 club_model=self.club_model.state_dict(),
-                context_decoder=self.context_decoder.state_dict(),
                 classifier=self.classifier.state_dict(),
                 policy=self.agent.policy.state_dict(),
                 uncertainty_mlp=self.agent.uncertainty_mlp.state_dict(),
                 context_encoder=self.agent.context_encoder.state_dict(),
                 reward_models=[reward_model.state_dict() for reward_model in self.reward_models],
                 dynamic_models=[dynamic_model.state_dict() for dynamic_model in self.dynamic_models],
+                context_decoder=self.agent.context_decoder.state_dict(),
                 )
         else:
             raise NotImplementedError

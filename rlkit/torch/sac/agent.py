@@ -45,17 +45,20 @@ def _canonical_to_natural(mu, sigma_squared):
 class PEARLAgent(nn.Module):
 
     def __init__(self,
-                 latent_dim,
                  context_encoder,
                  uncertainty_mlp,
+                 context_decoder,
                  policy,
                  **kwargs
     ):
         super().__init__()
-        self.latent_dim = latent_dim
+        self.latent_dim = kwargs['latent_dim']
+        self.obs_dim = kwargs['obs_dim']
+        self.action_dim = kwargs['action_dim']
 
         self.context_encoder = context_encoder
         self.uncertainty_mlp = uncertainty_mlp
+        self.context_decoder = context_decoder
         self.policy = policy
 
         self.recurrent = kwargs['recurrent']
@@ -68,10 +71,10 @@ class PEARLAgent(nn.Module):
 
         # initialize buffers for z dist and z
         # use buffers so latent context can be saved along with model weights
-        self.register_buffer('z', torch.zeros(1, latent_dim))
-        self.register_buffer('z_means', torch.zeros(1, latent_dim))
-        self.register_buffer('z_mins', torch.zeros(1, latent_dim))
-        self.register_buffer('z_vars', torch.zeros(1, latent_dim))
+        self.register_buffer('z', torch.zeros(1, self.latent_dim))
+        self.register_buffer('z_means', torch.zeros(1, self.latent_dim))
+        self.register_buffer('z_mins', torch.zeros(1, self.latent_dim))
+        self.register_buffer('z_vars', torch.zeros(1, self.latent_dim))
 
         self.clear_z()
 
@@ -159,12 +162,30 @@ class PEARLAgent(nn.Module):
         kl_divs = [torch.distributions.kl.kl_divergence(post, prior) for post in posteriors]
         kl_div_sum = torch.sum(torch.stack(kl_divs))
         return kl_div_sum
+    
+    def Recon_loss(self, context, params, epsilon=1e-8):
+        mb, b, _ = context.shape
+        latent_z = params.expand(mb, b, -1) # [10, 1024, 20]
+        # 10, 1024, 1
+        epsilon = 1e-8
+        r_ns = context[..., self.obs_dim+self.action_dim:]
+        r_ns = context[..., self.obs_dim+self.action_dim:]
+        s_z_a = torch.cat([context[..., : self.obs_dim], latent_z, context[..., self.obs_dim : self.obs_dim + self.action_dim]], dim=-1)
+        pre_r_ns_param = self.context_decoder(s_z_a)
+        split_size = int(self.context_decoder.output_size/2)
+        pre_r_ns_mean = pre_r_ns_param[..., :split_size]
+        pre_r_ns_var = F.softplus(pre_r_ns_param[..., split_size:])
+        # 计算高斯
+        probs = - (r_ns - pre_r_ns_mean)**2 / (pre_r_ns_var + epsilon) - torch.log(pre_r_ns_var**0.5 + epsilon)
+        return - probs
 
-    def infer_posterior(self, context, task_indices=None):
+    def infer_posterior(self, context, task_indices=None, is_mean = False):
         ''' compute q(z|c) as a function of input context and sample new z from it'''
         params = self.context_encoder(context)
         params = params.view(context.size(0), -1, self.context_encoder.output_size)
-        heterodastic_var = F.softplus(self.uncertainty_mlp(params).detach())
+        heterodastic_var = F.softplus(self.uncertainty_mlp(context).detach())
+        recon_loss = self.Recon_loss(context, params)
+
         if task_indices is None:
             self.task_indices = np.zeros((context.size(0),))
         elif not hasattr(task_indices, '__iter__'):
@@ -180,17 +201,10 @@ class PEARLAgent(nn.Module):
         batch_indices = torch.arange(min_index.size(0))
         self.z_mins = params[batch_indices, min_index]
 
-        # z_havar_weighted 
-        # softmax(e^-x)
-        # weights = F.softmax(torch.exp(-heterodastic_var), dim=1)
-        weights = F.softmax(-heterodastic_var, dim=1)
+        # z_weighted 
+        # weights = F.softmax(F.softmax(-heterodastic_var, dim=1) * F.softmax(-recon_loss, dim=1), dim=1)
+        weights = (F.softmax(-heterodastic_var, dim=1) + F.softmax(-recon_loss, dim=1))/ 2
         self.z_weighted = torch.sum(weights * params, dim=1) # [task, latent_dim]
-        # 1 - softmax    ：weighted_1-softmax
-        # weights = 1 - F.softmax(heterodastic_var, dim=1)
-        # self.z_weighted = torch.sum(weights * params, dim=1) / torch.sum(weights, dim=1)  # [task, latent_dim]
-        # softmax(-x)    : Softmax
-        # weights = F.softmax(-heterodastic_var, dim=1)
-        # self.z_weighted = torch.sum(weights * params, dim=1)  # [task, latent_dim]
 
         # z_quantile_mean 5-10
         sorted_indices = torch.argsort(heterodastic_var, dim=1)
@@ -205,16 +219,19 @@ class PEARLAgent(nn.Module):
             self.z_vars = torch.std(params, dim=1)
         else:
             self.z_vars = torch.zeros(params.size(0))
-        self.sample_z()
+        self.sample_z(is_mean=is_mean)
         
-        return heterodastic_var
+        return weights, self.z_weighted, self.z_means
 
     def encode_no_mean(self, context):
         params = self.context_encoder(context)
         params = params.view(context.size(0), -1, self.context_encoder.output_size)
         return params
 
-    def sample_z(self):
+    def sample_z(self, is_mean = False):
+        if is_mean:
+            self.z = self.z_means
+            return
         if self.z_strategy == 'mean':
             self.z = self.z_means
         elif self.z_strategy == 'min':
@@ -234,10 +251,10 @@ class PEARLAgent(nn.Module):
     def set_num_steps_total(self, n):
         self.policy.set_num_steps_total(n)
 
-    def forward(self, obs, context, task_indices=None):
+    def forward(self, obs, context, is_mean=False, task_indices=None):
         ''' given context, get statistics under the current policy of a set of observations '''
-        self.infer_posterior(context, task_indices=task_indices)
-        self.sample_z()
+        self.infer_posterior(context, task_indices=task_indices, is_mean=is_mean)
+        self.sample_z(is_mean=is_mean)
 
         task_z = self.z
 
@@ -266,4 +283,4 @@ class PEARLAgent(nn.Module):
 
     @property
     def networks(self):
-        return [self.context_encoder, self.uncertainty_mlp, self.policy]
+        return [self.context_encoder, self.context_decoder, self.uncertainty_mlp, self.policy]

@@ -56,6 +56,22 @@ def global_seed(seed=0):
     np.random.seed(seed)
     random.seed(seed)
 
+def Recon_loss(context, latent_z, obs_dim, action_dim, context_decoder, epsilon=1e-8):
+    # b, _ = context.shape
+    # latent_z = params.expand(b, -1) # [10, 1024, 20]
+    # 10, 1024, 1
+    epsilon = 1e-8
+    r_ns = context[..., obs_dim+action_dim:]
+    r_ns = context[..., obs_dim+action_dim:]
+    s_z_a = torch.cat([context[..., : obs_dim], latent_z, context[..., obs_dim : obs_dim + action_dim]], dim=-1)
+    pre_r_ns_param = context_decoder(s_z_a)
+    split_size = int(context_decoder.output_size/2)
+    pre_r_ns_mean = pre_r_ns_param[..., :split_size]
+    pre_r_ns_var = F.softplus(pre_r_ns_param[..., split_size:])
+    # 计算高斯
+    probs = - (r_ns - pre_r_ns_mean)**2 / (pre_r_ns_var + epsilon) - torch.log(pre_r_ns_var**0.5 + epsilon)
+    return - probs
+
 def calculate(variant, gpu_id, seed):
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     ptu.set_gpu_mode(True, gpu_id)
@@ -103,7 +119,8 @@ def calculate(variant, gpu_id, seed):
 
     uncertainty_mlp = MlpDecoder(
         hidden_sizes=[net_size],
-        input_size=latent_dim,
+        # input_size=latent_dim,
+        input_size=context_encoder_input_dim,
         output_size=1,
     )
 
@@ -114,7 +131,7 @@ def calculate(variant, gpu_id, seed):
     agent_path = log_dir/"agent.pth"
     if not agent_path.exists():
         exit(f"agent path {str(agent_path)} does not exist")
-    agent_ckpt = torch.load(str(agent_path))
+    agent_ckpt = torch.load(str(agent_path), weights_only=True)
     context_encoder.load_state_dict(agent_ckpt['context_encoder'])
     uncertainty_mlp.load_state_dict(agent_ckpt['uncertainty_mlp'])
     context_decoder.load_state_dict(agent_ckpt['context_decoder'])
@@ -209,10 +226,15 @@ def calculate(variant, gpu_id, seed):
 
     train_context = ptu.from_numpy(np.concatenate([np.array(obs_train_lst), np.array(action_train_lst), np.array(reward_train_lst), np.array(next_obs_train_lst)], axis=-1))
     eval_context = ptu.from_numpy(np.concatenate([np.array(obs_eval_lst), np.array(action_eval_lst), np.array(reward_eval_lst), np.array(next_obs_eval_lst)], axis=-1))
-    train_z = context_encoder(train_context[..., :context_encoder_input_dim])
-    eval_z = context_encoder(eval_context[..., :context_encoder_input_dim])
-    train_z_var = F.softplus(uncertainty_mlp(train_z)).detach().cpu().numpy()
-    eval_z_var = F.softplus(uncertainty_mlp(eval_z)).detach().cpu().numpy()
+    
+    context = train_context[..., :context_encoder_input_dim]
+    
+    train_z = context_encoder(context)
+    heterodastic_var = F.softplus(uncertainty_mlp(context))
+    train_z = train_z.view(-1, context_encoder.output_size)
+    recon_loss = Recon_loss(context, train_z, obs_dim, action_dim, context_decoder)
+    train_z_var = 1 - ((F.softmax(-heterodastic_var, dim=-2) + F.softmax(-recon_loss, dim=-2))/ 2)
+    
     min_5 = train_z_var.min() + 0.05*(train_z_var.max()-train_z_var.min())
     max_95 = train_z_var.min() + 0.95*(train_z_var.max()-train_z_var.min())
     print(f'5%分位数: {min_5}')
@@ -220,7 +242,7 @@ def calculate(variant, gpu_id, seed):
     return min_5, max_95
 
 def experiment(gpu_id, variant, seed=None, exp_names=None):
-    min_5, max_95 = calculate(variant, gpu_id, seed)
+    # min_5, max_95 = calculate(variant, gpu_id, seed)
 
     os.sched_setaffinity(0, [gpu_id*8+i for i in range(8)])
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
@@ -285,7 +307,8 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
 
     uncertainty_mlp = MlpDecoder(
         hidden_sizes=[net_size],
-        input_size=latent_dim,
+        # input_size=latent_dim,
+        input_size=context_encoder_input_dim,
         output_size=1,
     )
 
@@ -333,11 +356,14 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
     )
 
     agent = PEARLAgent(
-        latent_dim,
         context_encoder,
         uncertainty_mlp,
+        context_decoder,
         policy,
-        **variant['algo_params']
+        **variant['algo_params'],
+        latent_dim=latent_dim,
+        obs_dim=obs_dim,
+        action_dim=action_dim,
     )
 
     # Setting up tasks
@@ -357,7 +383,7 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
         env=env,
         train_tasks=train_tasks,
         eval_tasks=eval_tasks,
-        nets=[agent, qf1, qf2, vf, c, club_model, context_decoder, classifier, reward_models, dynamic_models],
+        nets=[agent, qf1, qf2, vf, c, club_model, classifier, reward_models, dynamic_models],
         latent_dim=latent_dim,
         goal_radius=goal_radius,
         seed=seed,
@@ -370,7 +396,7 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
         env=env,
         train_tasks=train_tasks,
         eval_tasks=eval_tasks,
-        nets=[agent, qf1, qf2, vf, c, club_model, context_decoder, classifier, reward_models, dynamic_models],
+        nets=[agent, qf1, qf2, vf, c, club_model, classifier, reward_models, dynamic_models],
         latent_dim=latent_dim,
         goal_radius=goal_radius,
         seed=seed,
@@ -385,35 +411,43 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
     # directory
     base_log_dir = variant['util_params']['base_log_dir']
     exp_prefix = variant['env_name']
-    log_dir_1 = Path(os.path.join(base_log_dir, exp_prefix.replace("_", "-"), exp_names[0], f"seed{seed}"))
-    log_dir_2 = Path(os.path.join(base_log_dir, exp_prefix.replace("_", "-"), exp_names[1], f"seed{seed}"))
-    agent_path_1 = log_dir_1/"agent.pth"
-    agent_path_2 = log_dir_2/"agent.pth"
 
-    agent_ckpt_1 = torch.load(str(agent_path_1))
-    print("agent_path_1: ", agent_path_1)
+    # log_dir_1 = Path(os.path.join(base_log_dir, exp_prefix.replace("_", "-"), exp_names[0], f"seed{seed}"))
+    # agent_path_1 = log_dir_1/"agent.pth"
+    # agent_ckpt_1 = torch.load(str(agent_path_1))
+    # print("agent_path_1: ", agent_path_1)
+
+    # algorithm.agent.policy.load_state_dict(agent_ckpt_1['policy'])
+    # algorithm.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
+    # algorithm.agent.context_encoder.load_state_dict(agent_ckpt_1['context_encoder'])
+    # algorithm.agent.context_decoder.load_state_dict(agent_ckpt_1['context_decoder'])
+    
+    # ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
+    # if ptu.gpu_enabled():
+    #     algorithm.to()
+    
+    # algorithm.draw_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = 0., max_95 = 0.1)
+    # algorithm.draw_neg_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = 0., max_95 = 0.1)
+    # algorithm.draw_z(variant['algo_params']['num_iterations'], str(log_dir_1))
+
+
+    log_dir_2 = Path(os.path.join(base_log_dir, exp_prefix.replace("_", "-"), exp_names[1], f"seed{seed}"))
+    agent_path_2 = log_dir_2/"agent.pth"
     agent_ckpt_2 = torch.load(str(agent_path_2))
     print("agent_path_2: ", agent_path_2)
-
-    algorithm.agent.policy.load_state_dict(agent_ckpt_1['policy'])
-    algorithm.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
-    algorithm.agent.context_encoder.load_state_dict(agent_ckpt_1['context_encoder'])
-    algorithm.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
-    ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
-    if ptu.gpu_enabled():
-        algorithm.to()
-    algorithm.draw_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = min_5, max_95 = max_95)
 
     algorithm_base.agent.policy.load_state_dict(agent_ckpt_2['policy'])
     algorithm_base.agent.uncertainty_mlp.load_state_dict(agent_ckpt_2['uncertainty_mlp'])
     algorithm_base.agent.context_encoder.load_state_dict(agent_ckpt_2['context_encoder'])
-    algorithm_base.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
+    algorithm_base.agent.context_decoder.load_state_dict(agent_ckpt_2['context_decoder'])
 
     ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
     if ptu.gpu_enabled():
         algorithm_base.to()
-    algorithm_base.draw_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = min_5, max_95 = max_95)
-
+    
+    # algorithm_base.draw_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = 0., max_95 = 0.1)
+    # algorithm_base.draw_neg_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = 0., max_95 = 0.1)
+    algorithm.draw_z(variant['algo_params']['num_iterations'], str(log_dir_2))
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
     # assume dicts have same keys
@@ -434,8 +468,7 @@ def deep_update_dict(fr, to):
 @click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)
 @click.option('--r_thres', default=None)
-# python show_path2.py configs/point-robot.json --gpu 0 --seed 0 --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
-# python show_path2.py configs/point-robot.json --gpu 0 --seed 5 --exp_name focal_mix_baseline --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted --hvar_path ./logs/point-robot/focal_mix_z0_hvar_p10_weighted/seed5/agent.pth 
+# python show_path_2.py configs/point-robot.json --gpu 0 --seed 0 --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
 def main(config, mujoco_version, gpu, seed, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
     variant = default_config
     if config:
@@ -447,9 +480,11 @@ def main(config, mujoco_version, gpu, seed, algo_type=None, train_z0_policy = No
     print(f"Parsed gpus: {gpu}")
     variant['util_params']['gpu_id'] = gpu
 
-    # exp_names = ['focal_mix_z0_hvar_p10_weighted', 'focal_mix_baseline']
-    # exp_names = ['classifier_mix_z0_hvar_p10_weighted', 'classifier_mix_baseline']
-    exp_names = ['unicorn_mix_z0_hvar_weighted', 'unicorn_mix_baseline']
+    # exp_names = ['focal_mix_z0_hvar_weighted_0.5_p', 'focal_mix_z0_hvar_mean_0.5_p']
+
+    # exp_names = ['focal_mix_z0_hvar_weighted_detach_p', 'focal_mix_z0_hvar_weighted_detach_p']
+    exp_names = ['classifier_mix_z0_hvar_weighted_detach', 'classifier_mix_z0_hvar_weighted_detach']
+    # exp_names = ['unicorn_mix_z0_hvar_weighted_0.1_p', 'unicorn_mix_z0_hvar_weighted_0.1_p']
     variant['util_params']['exp_name'] = exp_names[0]
     variant['algo_params']['pretrain'] = True
     if not (algo_type == None):

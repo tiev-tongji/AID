@@ -508,7 +508,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.trained_z_sample = {}
         for idx in self.train_tasks:
             context = self.sample_context(idx)
-            self.agent.infer_posterior(context)
+            self.agent.infer_posterior(context, is_mean=False)
             self.trained_z[idx] = (self.agent.z_means, self.agent.z_vars)
             self.trained_z_sample[idx] = self.agent.z
 
@@ -587,50 +587,170 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         if self.plotter:
             self.plotter.draw()
         # Plot T-SNE at the end of training
-        if epoch == (self.num_iterations - 1):
-            if self.separate_train and not self.pretrain:
-                if 'point-robot' in self.env_name:
-                    self.draw_path(epoch, logger._snapshot_dir)
-            if self.seed != 0:
-                return
-            print('---------T-SNE: Collecting Zs----------')
-            # sample offline context zs
-            fig_save_dir = logger._snapshot_dir + '/figures'
-            n_points = 100
-            offline_train_zs, offline_test_zs, online_train_zs, online_test_zs = [], [], [], []
-            for i in range(n_points):
-                print(f'Clollect {i} traj...')
-                offline_train_zs.append(self.collect_offline_zs(self.train_tasks, self.replay_buffer))
-                offline_test_zs.append(self.collect_offline_zs(self.eval_tasks, self.eval_buffer))
-                online_train_zs.append(self.collect_online_zs(self.train_tasks))
-                online_test_zs.append(self.collect_online_zs(self.eval_tasks))
-            offline_train_zs = np.stack(offline_train_zs, axis=1)
-            offline_test_zs = np.stack(offline_test_zs, axis=1)
-            online_train_zs = np.stack(online_train_zs, axis=1)
-            online_test_zs = np.stack(online_test_zs, axis=1)
+        if epoch != (self.num_iterations - 1):
+            return
+        if self.separate_train and not self.pretrain:
+            if 'point-robot' in self.env_name:
+                self.draw_path(epoch, logger._snapshot_dir)
+        if self.seed == 0:
+            self.draw_tsne(epoch, logger._snapshot_dir)
             
-            print('---------T-SNE: Plotting------------')
-            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_train_zs_{epoch}.png', zs=[offline_train_zs], subplot_title_lst=[f'offline_train_zs_{epoch}'])
-            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_test_zs_{epoch}.png', zs=[offline_test_zs], subplot_title_lst=[f'offline_test_zs_{epoch}'])
-            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_zs_{epoch}.png', zs=[online_train_zs], subplot_title_lst=[f'online_train_zs_{epoch}'])
-            self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_zs_{epoch}.png', zs=[online_test_zs], subplot_title_lst=[f'online_test_zs_{epoch}'])
-            # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_np_zs_{epoch}.png', zs=[online_train_np_zs], subplot_title_lst=[f'online_train_np_zs_{epoch}'])
-            # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_np_zs_{epoch}.png', zs=[online_test_np_zs], subplot_title_lst=[f'online_test_np_zs_{epoch}'])
+    def draw_tsne(self, epoch, logdir=None):
+        # sample offline context zs
+        fig_save_dir = logdir + '/figures'
+        if not os.path.exists(fig_save_dir):
+            os.makedirs(fig_save_dir)
+        n_points = 100
+        offline_train_zs, offline_test_zs, online_train_zs, online_test_zs = [], [], [], []
+        for i in range(n_points):
+            print(f'Clollect {i} traj...')
+            offline_train_zs.append(self.collect_offline_zs(self.train_tasks, self.replay_buffer))
+            offline_test_zs.append(self.collect_offline_zs(self.eval_tasks, self.eval_buffer))
+            online_train_zs.append(self.collect_online_zs(self.train_tasks))
+            online_test_zs.append(self.collect_online_zs(self.eval_tasks))
+        offline_train_zs = np.stack(offline_train_zs, axis=1)
+        offline_test_zs = np.stack(offline_test_zs, axis=1)
+        online_train_zs = np.stack(online_train_zs, axis=1)
+        online_test_zs = np.stack(online_test_zs, axis=1)
+            
+        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_train_zs_{epoch}.png', zs=[offline_train_zs], subplot_title_lst=[f'offline_train_zs_{epoch}'])
+        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_test_zs_{epoch}.png', zs=[offline_test_zs], subplot_title_lst=[f'offline_test_zs_{epoch}'])
+        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_zs_{epoch}.png', zs=[online_train_zs], subplot_title_lst=[f'online_train_zs_{epoch}'])
+        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_zs_{epoch}.png', zs=[online_test_zs], subplot_title_lst=[f'online_test_zs_{epoch}'])
+        # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_np_zs_{epoch}.png', zs=[online_train_np_zs], subplot_title_lst=[f'online_train_np_zs_{epoch}'])
+        # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_np_zs_{epoch}.png', zs=[online_test_np_zs], subplot_title_lst=[f'online_test_np_zs_{epoch}'])
+
+
+    def draw_z(self, epoch, logdir, is_z_random_switch=False, distance_metric='euclidean'):
+        import matplotlib.patches as patches
+        import seaborn as sns
+        
+        z_weighted_list = []
+        z_mean_list = []
+        task_labels = []
+        fig_save_dir = logdir + '/figures'
+        if not os.path.exists(fig_save_dir):
+            os.makedirs(fig_save_dir)
+    
+        for idx in list(self.eval_tasks):
+            if is_z_random_switch:
+                _, _, z_weighted, z_mean = self.collect_z_random_switch_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
+            else:
+                _, _, z_weighted, z_mean = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
+            z_weighted_list.append(z_weighted) # [task, latent_dim]
+            z_mean_list.append(z_mean)
+            task_labels.append(f'Task {idx}')
+        colors = plt.cm.tab20(np.linspace(0, 1, self.latent_dim, endpoint=False))
+        z_weighted_array = np.array(z_weighted_list)
+        z_mean_array = np.array(z_mean_list)
+
+        plt.figure(figsize=(16, 10))
+        for dim in range(self.latent_dim):
+            color = colors[dim]
+            # z_weighted: 虚线
+            plt.plot(task_labels, z_weighted_array[:, dim], linestyle='--', marker='o', color=color, label=f'Dim {dim} z_weighted')
+            # z_mean: 实线带marker（例如：正方形 marker）
+            plt.plot(task_labels, z_mean_array[:, dim], linestyle='-', marker='s', color=color, label=f'Dim {dim} z_mean')
+        plt.xlabel('task', fontsize=10)
+        plt.ylabel('value', fontsize=10)
+        plt.xticks(fontsize=8)
+        plt.yticks(fontsize=8)
+        plt.title('z_weighted and z_mean', fontsize=12)
+        plt.legend(fontsize=8, ncol=2) 
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_z_weighted_mean.pdf', dpi=400, bbox_inches='tight')
+        plt.close()
+
+        # 创建热力图，行对应不同 task，列对应 latent_dim
+        n_tasks = len(task_labels)
+        dist_matrix = np.zeros((n_tasks, n_tasks))
+        
+        for i in range(n_tasks):
+            for j in range(n_tasks):
+                if distance_metric == 'euclidean':
+                    # 欧几里得距离
+                    dist_matrix[i, j] = np.linalg.norm(z_weighted_array[i] - z_weighted_array[j])
+                elif distance_metric == 'manhattan':
+                    # 曼哈顿距离
+                    dist_matrix[i, j] = np.sum(np.abs(z_weighted_array[i] - z_weighted_array[j]))
+                elif distance_metric == 'cosine':
+                    # 余弦相似度(或距离)
+                    # 注意：如果想要“距离”而非“相似度”，可以用 1 - 余弦相似度
+                    dot_val = np.dot(z_weighted_array[i], z_weighted_array[j])
+                    norm_i = np.linalg.norm(z_weighted_array[i])
+                    norm_j = np.linalg.norm(z_weighted_array[j])
+                    cos_sim = dot_val / (norm_i * norm_j + 1e-8)
+                    dist_matrix[i, j] = 1.0 - cos_sim  # 余弦距离 = 1 - 余弦相似度
+                else:
+                    raise ValueError(f"Unknown distance metric: {distance_metric}")
+        
+        plt.figure(figsize=(16, 12))
+        ax = sns.heatmap(dist_matrix, annot=True, fmt=".2f", cmap='viridis',
+                         xticklabels=task_labels, yticklabels=task_labels, annot_kws={"size": 8})
+        plt.title(f'Heatmap of z_weighted across tasks (Epoch {epoch})', fontsize=12)
+        plt.xlabel('Latent Dimension', fontsize=10)
+        plt.ylabel('Task', fontsize=10)
+        plt.xticks(fontsize=8)
+        plt.yticks(fontsize=8)
+        plt.tight_layout()
+        plt.savefig(os.path.join(fig_save_dir, f'z_weighted_heatmap_{epoch}_{self.algo_type}.pdf'), dpi=400, bbox_inches='tight')
+        plt.close()
+        
+        # z_mean 热力图
+        for i in range(n_tasks):
+            for j in range(n_tasks):
+                if distance_metric == 'euclidean':
+                    # 欧几里得距离
+                    dist_matrix[i, j] = np.linalg.norm(z_mean_array[i] - z_mean_array[j])
+                elif distance_metric == 'manhattan':
+                    # 曼哈顿距离
+                    dist_matrix[i, j] = np.sum(np.abs(z_mean_array[i] - z_mean_array[j]))
+                elif distance_metric == 'cosine':
+                    # 余弦相似度(或距离)
+                    # 注意：如果想要“距离”而非“相似度”，可以用 1 - 余弦相似度
+                    dot_val = np.dot(z_mean_array[i], z_mean_array[j])
+                    norm_i = np.linalg.norm(z_mean_array[i])
+                    norm_j = np.linalg.norm(z_mean_array[j])
+                    cos_sim = dot_val / (norm_i * norm_j + 1e-8)
+                    dist_matrix[i, j] = 1.0 - cos_sim  # 余弦距离 = 1 - 余弦相似度
+                else:
+                    raise ValueError(f"Unknown distance metric: {distance_metric}")
+
+        plt.figure(figsize=(16, 12))
+        ax = sns.heatmap(dist_matrix, annot=True, fmt=".2f", cmap='viridis',
+                         xticklabels=task_labels, yticklabels=task_labels, annot_kws={"size": 8})
+        plt.title(f'Heatmap of z_mean across tasks (Epoch {epoch})', fontsize=12)
+        plt.xlabel('Latent Dimension', fontsize=10)
+        plt.ylabel('Task', fontsize=10)
+        plt.xticks(fontsize=8)
+        plt.yticks(fontsize=8)
+        plt.tight_layout()
+        plt.savefig(os.path.join(fig_save_dir, f'z_mean_heatmap_{epoch}_{self.algo_type}.pdf'), dpi=400, bbox_inches='tight')
+        plt.close()
 
     def draw_path(self, epoch, logdir, min_5 = None, max_95 = None, is_z_random_switch=False):
         import matplotlib.patches as patches
         import seaborn as sns
+        
+        fig_save_dir = logdir + '/figures'
+        if not os.path.exists(fig_save_dir):
+            os.makedirs(fig_save_dir)
 
-        for idx in self.eval_tasks:
+        for idx in list(self.eval_tasks):
             if is_z_random_switch:
-                paths, heterodastic_vars = self.collect_z_random_switch_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
+                paths, heterodastic_vars, z_weighted, z_mean = self.collect_z_random_switch_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
             else:
-                paths, heterodastic_vars = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
-            fig = plt.figure(figsize=(20, 12))
+                paths, heterodastic_vars, z_weighted, z_mean = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True)
+            fig, axs = plt.subplots(1, 2, figsize=(24, 10))
+
+            ############################
+            # 左侧子图：Path 可视化
+            ############################
+            ax = axs[0]
             sns.set_theme(style="white", font_scale=2.0)
 
-            ax = plt.gca()
-
+            # 绘制半圆弧
             half_circle = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=180, color=(180./255., 180./255., 180./255.), linewidth=2)
             ax.add_artist(half_circle)
 
@@ -645,6 +765,116 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             save_data = []
             vmin = min_5 if min_5 is not None else np.min(np.concatenate(heterodastic_vars))
             vmax = max_95 if max_95 is not None else np.max(np.concatenate(heterodastic_vars))
+            # print(f'min: {np.min(np.concatenate(heterodastic_vars))}, max: {np.max(np.concatenate(heterodastic_vars))}')
+            for i, path in enumerate(paths[:2]):
+                observations = np.array(path['observations'])
+                heterodastic_var = np.array(heterodastic_vars[i])
+                line, = ax.plot(observations[:, 0], observations[:, 1], color=colors[i % len(colors)], linestyle='-', label=f'episode Line {i + 1}', linewidth=4, zorder=1)
+                sc = ax.scatter(observations[:, 0], observations[:, 1], c=heterodastic_var, cmap='coolwarm', vmin=vmin, vmax=vmax, marker='o', label=f'episode {i + 1}', linewidth=4, zorder=2)
+                save_data.append({
+                    'observations': observations.tolist(),
+                    'heterodastic_var': heterodastic_var.tolist(),
+                    'goal': path['goal']
+                })
+                lines_for_legend.append(line)
+
+            goal = path['goal']
+            goal_point = ax.scatter(
+                goal[0], goal[1],
+                edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
+                facecolors='none',           # 空心
+                marker='*',
+                label='Goal',
+                s=500,                       # 控制圆圈的大小，增大半径
+                linewidths=3,                # 设置边框线宽
+                zorder=3                     # 控制绘制顺序
+            )
+            lines_for_legend.append(goal_point)
+
+            start = (0.,0.)
+            start_point = ax.scatter(
+                start[0], start[1],
+                edgecolors=(0.9, 0.2, 0.4),  # 设置边框颜色
+                facecolors='none',
+                marker='o',
+                label='Start',
+                s=450,                       # 控制圆圈的大小，增大半径
+                linewidths=3,                # 设置边框线宽
+                zorder=3                     # 控制绘制顺序
+            )
+            lines_for_legend.append(start_point)
+
+            cbar = plt.colorbar(sc, label='Uncertainty', fraction=0.05, pad=0.1, shrink=1.0, aspect=20, orientation='horizontal')
+            cbar.ax.tick_params(labelsize=20)
+            # if is_baseline:
+            #     plt.title(f'Point-Robot {self.algo_type}', pad=20, fontsize=20)
+            # else:
+            #     plt.title(f'Point-Robot {self.algo_type} + Ours', pad=20, fontsize=20)
+            ax.axis('off')
+            # ax.xlabel('X')
+            # ax.ylabel('Y')
+            ax.legend(handles=lines_for_legend, loc='upper right')
+            ax.set_title(f'Task {idx}: Path')
+
+            ############################
+            # 右侧子图： z_weighted 与 z_mean
+            ############################
+            ax2 = axs[1]
+            latent_dim = self.latent_dim
+            dims = np.arange(latent_dim)
+            colors_z = plt.cm.tab20(np.linspace(0, 1, latent_dim, endpoint=False))
+            # 对每个 latent dimension 绘制 z_weighted 与 z_mean 的值
+            # for dim in range(latent_dim):
+            #     color = colors_z[dim]
+            #     # z_weighted 用虚线和圆形 marker
+            #     ax2.plot(dims[dim], z_weighted[dim], linestyle='--', marker='o', color=color,
+            #              label=f'Dim {dim} z_weighted' if dim == 0 else "")
+            #     # z_mean 用实线和方形 marker
+            #     ax2.plot(dims[dim], z_mean[dim], linestyle='-', marker='s', color=color,
+            #              label=f'Dim {dim} z_mean' if dim == 0 else "")
+            
+            # 因为每个点是单独绘制的，所以连线效果不明显，可改为直接使用 scatter 或将数组整体绘制
+            ax2.plot(dims, z_weighted, linestyle='--', marker='o', color='blue', label='z_weighted')
+            ax2.plot(dims, z_mean, linestyle='-', marker='s', color='red', label='z_mean')
+
+            ax2.set_xlabel('Latent Dimension', fontsize=14)
+            ax2.set_ylabel('Value', fontsize=14)
+            ax2.set_title(f'Task {idx}: z_weighted & z_mean')
+            ax2.tick_params(labelsize=12)
+            ax2.legend(fontsize=12, ncol=1)
+            ax2.grid(True)
+
+            plt.tight_layout()
+            plt.savefig(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_{idx}.pdf', dpi=400, bbox_inches='tight')
+            plt.close()
+
+    def draw_neg_path(self, epoch, logdir, min_5 = None, max_95 = None, is_z_random_switch=False):
+        import matplotlib.patches as patches
+        import seaborn as sns
+        
+        for idx in np.arange(0, 4).tolist():
+            if is_z_random_switch:
+                paths, heterodastic_vars, _, _ = self.collect_z_random_switch_online_paths(idx, 0, 0, None, return_heterodastic_var=True, neg_task=True)
+            else:
+                paths, heterodastic_vars, _, _ = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True, neg_task=True)
+            fig = plt.figure(figsize=(20, 12))
+            sns.set_theme(style="white", font_scale=2.0)
+
+            ax = plt.gca()
+
+            full_circle = patches.Arc((0, 0), 2, 2, angle=0, theta1=0, theta2=360, color=(180./255., 180./255., 180./255.), linewidth=2)
+            ax.add_artist(full_circle)
+
+            ax.set_xlim(-1.1, 1.1)  # x 轴范围 [-1, 1]
+            ax.set_ylim(-1.1, 1.1)  # y 轴范围 [-1, 1]
+            ax.set_aspect('equal', 'box')
+
+            colors = [(117./255., 196./255., 175./255.), (249./255., 116./255., 70./255.)]
+            lines_for_legend = []  # 存储用于显示在图例中的线条
+            save_data = []
+            vmin = min_5 if min_5 is not None else np.min(np.concatenate(heterodastic_vars))
+            vmax = max_95 if max_95 is not None else np.max(np.concatenate(heterodastic_vars))
+            print(f'min: {np.min(np.concatenate(heterodastic_vars))}, max: {np.max(np.concatenate(heterodastic_vars))}')
             for i, path in enumerate(paths[:2]):
                 observations = np.array(path['observations'])
                 heterodastic_var = np.array(heterodastic_vars[i])
@@ -685,19 +915,14 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             lines_for_legend.append(start_point)
             cbar = plt.colorbar(sc, label='Uncertainty', fraction=0.05, pad=0.1, shrink=1.0, aspect=20, orientation='horizontal')
             cbar.ax.tick_params(labelsize=20)
-            # if is_baseline:
-            #     plt.title(f'Point-Robot {self.algo_type}', pad=20, fontsize=20)
-            # else:
-            #     plt.title(f'Point-Robot {self.algo_type} + Ours', pad=20, fontsize=20)
             plt.xlabel('X')
             plt.ylabel('Y')
-            # plt.legend(loc='upper right')
             plt.legend(handles=lines_for_legend, loc='upper right')
 
             fig_save_dir = logdir + '/figures'
             if not os.path.exists(fig_save_dir):
                 os.makedirs(fig_save_dir)
-            plt.savefig(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_{idx}.pdf', dpi=400, bbox_inches='tight')
+            plt.savefig(f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_{idx}_neg.pdf', dpi=400, bbox_inches='tight')
             plt.close()
     
     def show_return(self, tb_writer, epoch, is_last=False):
@@ -829,9 +1054,12 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         assert idx != -1
         return idx
 
-    def collect_online_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False):
+    def collect_online_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False, neg_task=False):
         self.task_idx = idx
-        self.env.reset_task(idx)
+        if neg_task:
+            self.env.reset_neg_task(idx)
+        else:
+            self.env.reset_task(idx)
 
         self.agent.clear_z()
         paths = []
@@ -863,7 +1091,10 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 num_transitions += num
                 num_trajs += 1
                 if num_transitions >= self.num_exp_traj_eval * self.max_path_length and self.agent.context is not None:
-                    heterodastic_var = self.agent.infer_posterior(self.agent.context).cpu().numpy()
+                    weight, z_weighted, z_mean = self.agent.infer_posterior(self.agent.context, is_mean = False)
+                    weight = weight.squeeze().cpu().detach().numpy()
+                    z_weighted = z_weighted.squeeze().cpu().detach().numpy()
+                    z_mean = z_mean.squeeze().cpu().detach().numpy()
         else:
             clear = []
             for i in range(2):
@@ -877,7 +1108,10 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                     max_path_length=self.first_path_len if i == 0 else None)
                 paths += path
                 num_transitions += num
-                heterodastic_var = self.agent.infer_posterior(self.agent.context).squeeze().cpu().numpy()
+                weight, z_weighted, z_mean = self.agent.infer_posterior(self.agent.context, is_mean = False)
+                weight = weight.squeeze().cpu().detach().numpy()
+                z_weighted = z_weighted.squeeze().cpu().detach().numpy()
+                z_mean = z_mean.squeeze().cpu().detach().numpy()
 
         if self.sparse_rewards:
             for p in paths:
@@ -890,16 +1124,19 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         
         if return_heterodastic_var:
             if self.first_path_len is None:
-                heterodastic_var_list = np.array_split(heterodastic_var, 2)
+                heterodastic_var_list = np.array_split(weight, 2)
             else:
-                heterodastic_var_list = [heterodastic_var[:self.first_path_len], heterodastic_var[self.first_path_len:]]
-            return paths, heterodastic_var_list
+                heterodastic_var_list = [weight[:self.first_path_len], weight[self.first_path_len:]]
+            return paths, heterodastic_var_list, z_weighted, z_mean
         else:
             return paths
 
-    def collect_random_online_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False):
+    def collect_random_online_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False, neg_task=False):
         self.task_idx = idx
-        self.env.reset_task(idx)
+        if neg_task:
+            self.env.reset_neg_task()
+        else:
+            self.env.reset_task(idx)
 
         self.agent.clear_z()
         paths = []
@@ -916,7 +1153,10 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             paths += path
             num_transitions += num
             # if num_transitions >= self.num_exp_traj_eval * self.max_path_length and self.agent.context is not None:
-            heterodastic_var = self.agent.infer_posterior(self.agent.context).squeeze().cpu().numpy()
+            weight, z_weighted, z_mean = self.agent.infer_posterior(self.agent.context, is_mean = False)
+            weight = weight.squeeze().cpu().detach().numpy()
+            z_weighted = z_weighted.squeeze().cpu().detach().numpy()
+            z_mean = z_mean.squeeze().cpu().detach().numpy()
 
         if self.sparse_rewards:
             for p in paths:
@@ -929,17 +1169,20 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         
         if return_heterodastic_var:
             if self.first_path_len is None:
-                heterodastic_var_list = np.array_split(heterodastic_var, 2)
+                heterodastic_var_list = np.array_split(weight, 2)
             else:
-                heterodastic_var_list = [heterodastic_var[:self.first_path_len], heterodastic_var[self.first_path_len:]]
+                heterodastic_var_list = [weight[:self.first_path_len], weight[self.first_path_len:]]
                 print(heterodastic_var_list)
             return paths, heterodastic_var_list
         else:
             return paths
     
-    def collect_z_random_switch_online_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False):
+    def collect_z_random_switch_online_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False, neg_task=False):
         self.task_idx = idx
-        self.env.reset_task(idx)
+        if neg_task:
+            self.env.reset_neg_task()
+        else:
+            self.env.reset_task(idx)
 
         self.agent.clear_z()
         paths = []
@@ -956,7 +1199,10 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 max_path_length=self.first_path_len if i == 0 else None)
             paths += path
             num_transitions += num
-            heterodastic_var = self.agent.infer_posterior(self.agent.context).squeeze().cpu().numpy()
+            heterodastic_var, z_weighted, z_mean = self.agent.infer_posterior(self.agent.context, is_mean = False)
+            heterodastic_var = heterodastic_var.squeeze().cpu().detach().numpy()
+            z_weighted = z_weighted.squeeze().cpu().detach().numpy()
+            z_mean = z_mean.squeeze().cpu().detach().numpy()
 
         if self.sparse_rewards:
             for p in paths:
@@ -972,7 +1218,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 heterodastic_var_list = np.array_split(heterodastic_var, 2)
             else:
                 heterodastic_var_list = np.split(heterodastic_var, [self.first_path_len])
-            return paths, heterodastic_var_list
+            return paths, heterodastic_var_list, z_weighted, z_mean
         else:
             return paths
 
@@ -986,7 +1232,10 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
     def collect_np_online_paths(self, idx, epoch, run, buffer):
         self.task_idx = idx
-        self.env.reset_task(idx)
+        if idx == -1:
+            self.env.reset_neg_task()
+        else:
+            self.env.reset_task(idx)
 
         self.agent.clear_z()
         paths = []
@@ -1018,7 +1267,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             np_online_all_num += np_online_num
 
             if num_transitions >= self.num_exp_traj_eval * self.max_path_length:
-                self.agent.infer_posterior(self.agent.context)
+                self.agent.infer_posterior(self.agent.context, is_mean = False)
 
         if self.sparse_rewards:
             for p in paths:

@@ -46,8 +46,25 @@
         "FOCAL": {
             "hvar_punish_w": 2.0,
             "use_focal_loss": true,
+            "use_recon_loss": false,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/cheetah-vel/pre/focal_mix_z0_hvar_pre/"
+            "pretrained_agent_path": "logs/cheetah-vel/focal_mix_z0_hvar_pre"
+        },
+        "CLASSIFIER": {
+            "hvar_punish_w": 10,
+            "use_classify_loss": true,
+            "use_recon_loss": false,
+            "classify_loss_weight": 1.0,
+            "recon_loss_weight": 1.0,
+            "pretrained_agent_path": "logs/cheetah-vel/pre/classifier_mix_z0_hvar_pre_detach"
+        },
+        "UNICORN": {
+            "hvar_punish_w": 0.1,
+            "use_focal_loss": true,
+            "use_recon_loss": true,
+            "focal_loss_weight": 0.5,
+            "recon_loss_weight": 1.0,
+            "pretrained_agent_path": "logs/cheetah-vel/UNICORN/unicorn_z0_hvar_0.5_pre"
         },
         "CSRO": {
             "use_focal_loss": true,
@@ -63,25 +80,11 @@
             "infoNCE_temp": 0.1,
             "pretrained_agent_path": ""
         },
-        "UNICORN": {
-            "hvar_punish_w": 0.1,
-            "use_focal_loss": true,
-            "use_recon_loss": true,
-            "focal_loss_weight": 0.5,
-            "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/cheetah-vel/UNICORN/unicorn_z0_hvar_0.5_pre"
-        },
         "RECON": {
             "hvar_punish_w": 100,
             "use_recon_loss": true,
             "recon_loss_weight": 1.0,
             "pretrained_agent_path": "logs/point-robot/pre/recon_mix_baseline_pre"
-        },
-        "CLASSIFIER": {
-            "hvar_punish_w": 10,
-            "use_classify_loss": true,
-            "classify_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/cheetah-vel/pre/classifier_mix_z0_hvar_pre"
         },
         "CROO": {
             "use_croo_loss": true,

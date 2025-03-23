@@ -34,11 +34,23 @@ class PointEnv(Env):
         self.action_space = spaces.Box(low=-0.1, high=0.1, shape=(2,))
         self._max_episode_steps = max_episode_steps
         self._step = 0
+        
+        # 添加 negative 目标：选择一个大于 π 的角度，比如 π + π/4
+        negative_angles = np.linspace(np.pi + np.pi/4, 2 * np.pi, num=4)
+        negative_xs = radius * np.cos(negative_angles)
+        negative_ys = radius * np.sin(negative_angles)
+        negative_goals = np.stack([negative_xs, negative_ys], axis=1)
+        self.negative_goals = negative_goals
 
     def reset_task(self, idx):
         ''' reset goal AND reset the agent '''
         self._goal_idx = idx
         self._goal = self.goals[idx]
+        self.reset()
+    
+    def reset_neg_task(self, idx):
+        self._goal_idx = idx
+        self._goal = self.negative_goals[idx]
         self.reset()
 
     def get_all_task_idx(self):
@@ -103,7 +115,7 @@ class PointWindEnv(PointEnv):
         winds = np.stack([wind_x, wind_y], axis=1)
         goals = goals.tolist()
         self.winds = winds
-        
+
         super().__init__(randomize_tasks, n_tasks, max_episode_steps)
         self.goals = goals
         if isinstance(goal_idx, int):
