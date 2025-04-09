@@ -138,5 +138,7 @@ offline_dataset
 .vscode
 logs
 logs_old
+logs_1
+logs_2
 
 images/

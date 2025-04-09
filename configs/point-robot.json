@@ -46,7 +46,7 @@
             "hvar_punish_w": 10,
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/focal_mix_z0_hvar_pre"
+            "pretrained_agent_path": "logs/point-robot/focal_mid_z0_hvar_pre"
         },
         "CSRO": {
             "use_focal_loss": true,
@@ -68,7 +68,7 @@
             "use_recon_loss": true,
             "focal_loss_weight": 0.5,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/pre/unicorn_mix_z0_pre_+10"
+            "pretrained_agent_path": "logs/point-robot/unicorn_mid_z0_hvar_pre"
         },
         "RECON": {
             "hvar_punish_w": 2,
@@ -80,7 +80,7 @@
             "hvar_punish_w": 10,
             "use_classify_loss": true,
             "classify_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/point-robot/pre/classifier_mix_z0_hvar_pre"
+            "pretrained_agent_path": "logs/point-robot/classifier_mid_z0_hvar_pre"
         },
         "CROO": {
             "use_croo_loss": true,

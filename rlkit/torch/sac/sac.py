@@ -9,6 +9,7 @@ from torch import nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
 from itertools import product
+from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.core.eval_util import create_stats_ordered_dict
 from rlkit.core.rl_algorithm import OfflineMetaRLAlgorithm
 from rlkit.torch.brac import divergences
@@ -135,7 +136,7 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
         self.hvar_loss                      = nn.MSELoss()
         self.cross_entropy_loss             = nn.CrossEntropyLoss()
 
-        self.qf1, self.qf2, _, _, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models = nets[1:]
+        self.qf1, self.qf2, _, _, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models, self.task_dynamics = nets[1:]
         if self.policy_update_strategy == 'BRAC':
             self.vf                             = nets[3]
             self.target_vf                      = self.vf.copy()
@@ -217,19 +218,19 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
             self.agent.uncertainty_mlp.train(mode)
             self.agent.context_encoder.train(mode)
         elif self.separate_train and not self.pretrain:
-            for net in self.networks:
-                net.train(mode)
             self.club_model.eval()
             self.context_decoder.eval()
             self.classifier.eval()
             self.agent.uncertainty_mlp.eval()
             self.agent.context_encoder.eval()
+            self.dynamic_models.eval()
 
     def to(self, device=None):
         if device == None:
             device = ptu.device
         for net in self.networks:
             net.to(device)
+        self.task_dynamics.to(device)
         if self.train_alpha and self.policy_update_strategy == 'BRAC':
             self._alpha_var = torch.tensor(self.alpha_init, device=ptu.device, requires_grad=True)
         if self.policy_update_strategy == 'BRAC':
@@ -1055,8 +1056,6 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
                 policy=self.agent.policy.state_dict(),
                 uncertainty_mlp=self.agent.uncertainty_mlp.state_dict(),
                 context_encoder=self.agent.context_encoder.state_dict(),
-                reward_models=[reward_model.state_dict() for reward_model in self.reward_models],
-                dynamic_models=[dynamic_model.state_dict() for dynamic_model in self.dynamic_models],
                 )
         else:
             raise NotImplementedError

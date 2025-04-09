@@ -3,6 +3,7 @@ Launcher for experiments with CSRO
 
 """
 import os
+import glob
 from pathlib import Path
 import numpy as np
 import click
@@ -423,47 +424,80 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
     base_log_dir = variant['util_params']['base_log_dir']
     exp_prefix = variant['env_name']
     log_dir_1 = Path(os.path.join(base_log_dir, exp_prefix.replace("_", "-"), exp_names[0], f"seed{seed}"))
-    agent_path_1 = log_dir_1/"agent.pth"
-    agent_ckpt_1 = torch.load(str(agent_path_1))
-    print("agent_path_1: ", agent_path_1)
+    
+    ##############################################
+    file_list_1 = glob.glob(os.path.join(log_dir_1, 'agent_*.pth'))
+    file_list_1.sort(key=lambda x: int(x.split('_')[-1].split('.')[0]))
 
-    algorithm.agent.policy.load_state_dict(agent_ckpt_1['policy'])
-    algorithm.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
-    algorithm.agent.context_encoder.load_state_dict(agent_ckpt_1['context_encoder'])
-    # algorithm.agent.context_decoder.load_state_dict(agent_ckpt_1['context_decoder'])
+    for i, file in enumerate(file_list_1):
+        agent_ckpt_1 = torch.load(str(file))
+        algorithm.agent.policy.load_state_dict(agent_ckpt_1['policy'])
+        algorithm.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
+        algorithm.agent.context_encoder.load_state_dict(agent_ckpt_1['context_encoder'])
+        # algorithm.agent.context_decoder.load_state_dict(agent_ckpt_1['context_decoder'])
+        if ptu.gpu_enabled():
+            algorithm.to()
+        algorithm.draw_path(5 * i, str(log_dir_1), min_5 = min_5, max_95 = max_95)
     
-    ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
-    if ptu.gpu_enabled():
-        algorithm.to()
+    ##############################################
+    # agent_path_1 = log_dir_1/"agent.pth"
+    # agent_ckpt_1 = torch.load(str(agent_path_1))
+    # print("agent_path_1: ", agent_path_1)
+
+    # algorithm.agent.policy.load_state_dict(agent_ckpt_1['policy'])
+    # algorithm.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
+    # algorithm.agent.context_encoder.load_state_dict(agent_ckpt_1['context_encoder'])
+    # # algorithm.agent.context_decoder.load_state_dict(agent_ckpt_1['context_decoder'])
     
-    if variant['env_name'] == 'point-robot':
-        # algorithm.draw_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = min_5, max_95 = max_95)
-        # algorithm.draw_neg_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = min_5, max_95 = max_95)
-        # algorithm.draw_manual_path(variant['algo_params']['num_iterations'], str(log_dir_1))
-        first_path = algorithm.draw_in_and_out_of_distribution_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = 0.9, max_95 = max_95)
-    # algorithm.draw_z(variant['algo_params']['num_iterations'], str(log_dir_1))
+    # ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
+    # if ptu.gpu_enabled():
+    #     algorithm.to()
+    
+    # if variant['env_name'] == 'point-robot':
+    #     # algorithm.draw_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = min_5, max_95 = max_95)
+    #     # algorithm.draw_neg_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = min_5, max_95 = max_95)
+    #     # algorithm.draw_manual_path(variant['algo_params']['num_iterations'], str(log_dir_1))
+    #     first_path = algorithm.draw_in_and_out_of_distribution_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = 0.9, max_95 = max_95)
+    # # algorithm.draw_z(variant['algo_params']['num_iterations'], str(log_dir_1))
 
 
     log_dir_2 = Path(os.path.join(base_log_dir, exp_prefix.replace("_", "-"), exp_names[1], f"seed{seed}"))
-    agent_path_2 = log_dir_2/"agent.pth"
-    agent_ckpt_2 = torch.load(str(agent_path_2))
-    print("agent_path_2: ", agent_path_2)
-
-    algorithm_base.agent.policy.load_state_dict(agent_ckpt_2['policy'])
-    algorithm_base.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
-    algorithm_base.agent.context_encoder.load_state_dict(agent_ckpt_2['context_encoder'])
-    algorithm_base.agent.z_strategy = 'mean'
-    # algorithm_base.agent.context_decoder.load_state_dict(agent_ckpt_2['context_decoder'])
-
-    ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
-    if ptu.gpu_enabled():
-        algorithm_base.to()
     
-    if variant['env_name'] == 'point-robot':
-        # algorithm_base.draw_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = min_5, max_95 = max_95)
-        # algorithm_base.draw_neg_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = min_5, max_95 = max_95)
-        algorithm_base.draw_in_and_out_of_distribution_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = 0.9, max_95 = max_95, path = first_path)
-    # algorithm.draw_z(variant['algo_params']['num_iterations'], str(log_dir_2))
+    ##############################################
+    file_list_2 = glob.glob(os.path.join(log_dir_2, 'agent_*.pth'))
+    file_list_2.sort(key=lambda x: int(x.split('_')[-1].split('.')[0]))
+
+    for i, file in enumerate(file_list_2):
+        agent_ckpt_2 = torch.load(str(file))
+        algorithm_base.agent.policy.load_state_dict(agent_ckpt_2['policy'])
+        algorithm_base.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
+        algorithm_base.agent.context_encoder.load_state_dict(agent_ckpt_2['context_encoder'])
+        # algorithm.agent.context_decoder.load_state_dict(agent_ckpt_1['context_decoder'])
+        algorithm_base.agent.z_strategy = 'mean'
+        if ptu.gpu_enabled():
+            algorithm_base.to()
+        algorithm_base.draw_path(5 * i, str(log_dir_2), min_5 = min_5, max_95 = max_95)
+    
+    ##############################################
+    # agent_path_2 = log_dir_2/"agent.pth"
+    # agent_ckpt_2 = torch.load(str(agent_path_2))
+    # print("agent_path_2: ", agent_path_2)
+
+    # algorithm_base.agent.policy.load_state_dict(agent_ckpt_2['policy'])
+    # algorithm_base.agent.uncertainty_mlp.load_state_dict(agent_ckpt_1['uncertainty_mlp'])
+    # algorithm_base.agent.context_encoder.load_state_dict(agent_ckpt_2['context_encoder'])
+    # algorithm_base.agent.z_strategy = 'mean'
+    # # algorithm_base.agent.context_decoder.load_state_dict(agent_ckpt_2['context_decoder'])
+
+    # ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
+    # if ptu.gpu_enabled():
+    #     algorithm_base.to()
+    
+    # if variant['env_name'] == 'point-robot':
+    #     # algorithm_base.draw_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = min_5, max_95 = max_95)
+    #     # algorithm_base.draw_neg_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = min_5, max_95 = max_95)
+    #     algorithm_base.draw_in_and_out_of_distribution_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = 0.9, max_95 = max_95, path = first_path)
+    # # algorithm.draw_z(variant['algo_params']['num_iterations'], str(log_dir_2))
     
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
@@ -497,8 +531,8 @@ def main(config, mujoco_version, gpu, seed, algo_type=None, train_z0_policy = No
     print(f"Parsed gpus: {gpu}")
     variant['util_params']['gpu_id'] = gpu
 
-    exp_names = ['FOCAL0135/focal_mix_z0_hvar_p10_weighted', 'FOCAL0135/focal_mix_baseline']
-    # exp_names = ['CLASSIFIER0349/classifier_mix_z0_hvar_p10_weighted', 'CLASSIFIER0349/classifier_mix_baseline']
+    # exp_names = ['FOCAL0135/focal_mix_z0_hvar_p10_weighted', 'FOCAL0135/focal_mix_baseline']
+    exp_names = ['CLASSIFIER0349/classifier_mix_z0_hvar_p10_weighted', 'CLASSIFIER0349/classifier_mix_baseline']
     # exp_names = ['UNICORN1237/unicorn_mix_z0_hvar_weighted', 'UNICORN1237/unicorn_mix_baseline']
     
     variant['util_params']['exp_name'] = exp_names[0]

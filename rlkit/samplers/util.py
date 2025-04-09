@@ -196,6 +196,76 @@ def offline_sample(env, agent, buffer, max_path_length=np.inf, accum_context=Tru
     )
 
 
+def manual_rollout(env, agent, max_path_length=np.inf, accum_context=True, 
+                   update_z_per_step=False, animated=False, save_frames=False):
+    observations = []
+    actions = []
+    rewards = []
+    terminals = []
+    agent_infos = []
+    env_infos = []
+
+    # 使用 env.reset() 初始化环境，但覆盖其返回的 observation 为随机下半圆采样
+    o = env.reset()
+    next_o = None
+    path_length = 0
+
+    if animated:
+        env.render()
+    while path_length < max_path_length:
+        # 生成随机 action：位于下半圆的单位向量
+        theta = np.random.uniform(np.pi, 2 * np.pi)
+        a = np.array([np.cos(theta), np.sin(theta)])
+        agent_info = {}
+        next_o, r, d, env_info = env.step(a)
+
+        # 如果环境支持稀疏奖励，则计算并记录
+        if callable(getattr(env, "sparsify_rewards", None)):
+            env_info = {'sparse_reward': env.sparsify_rewards(r)}
+        # 更新 agent 的上下文
+        if accum_context:
+            agent.update_context([o, a, r, next_o, d, env_info])
+        if update_z_per_step:
+            agent.infer_posterior(agent.context)
+        observations.append(o)
+        rewards.append(r)
+        terminals.append(d)
+        actions.append(a)
+        agent_infos.append(agent_info)
+        path_length += 1
+        o = next_o  # 使用环境的下一状态
+        if animated:
+            env.render()
+        if save_frames:
+            image = Image.fromarray(np.flipud(env.get_image()))
+            env_info['frame'] = image
+        env_infos.append(env_info)
+        if d:
+            break
+
+    actions = np.array(actions)
+    if len(actions.shape) == 1:
+        actions = np.expand_dims(actions, 1)
+    observations = np.array(observations)
+    if len(observations.shape) == 1:
+        observations = np.expand_dims(observations, 1)
+        next_o = np.array([next_o])
+    next_observations = np.vstack(
+        (
+            observations[1:, :],
+            np.expand_dims(next_o, 0)
+        )
+    )
+    return dict(
+        observations=observations,
+        actions=actions,
+        rewards=np.array(rewards).reshape(-1, 1),
+        next_observations=next_observations,
+        terminals=np.array(terminals).reshape(-1, 1),
+        agent_infos=agent_infos,
+        env_infos=env_infos,
+    )
+
 
 def rollout(env, agent, max_path_length=np.inf, accum_context=True, update_z_per_step=False, animated=False, save_frames=False):
     """

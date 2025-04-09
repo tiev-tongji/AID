@@ -3,6 +3,7 @@ Launcher for experiments with CSRO
 
 """
 import os
+import glob
 from pathlib import Path
 import numpy as np
 import click
@@ -12,6 +13,7 @@ import torch
 import random
 import multiprocessing as mp
 from itertools import product
+import torch.nn.functional as F
 import sys
 from tensorboardX import SummaryWriter
 
@@ -27,8 +29,8 @@ if '--mujoco_version' in sys.argv:
 
 # 设置 MuJoCo 环境变量
 if mujoco_version == '131':
-    os.environ['MUJOCO_PY_MJPRO_PATH'] = os.path.expanduser('~/.mujoco/mjpro131')
-    os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:{os.path.expanduser('~/.mujoco/mjpro131/bin')}:/usr/lib/nvidia"
+        os.environ['MUJOCO_PY_MJPRO_PATH'] = os.path.expanduser('~/.mujoco/mjpro131')
+        os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:{os.path.expanduser('~/.mujoco/mjpro131/bin')}:/usr/lib/nvidia"
 elif mujoco_version == '200':
     os.environ['MUJOCO_PY_MJPRO_PATH'] = '/home/autolab/.mujoco/mujoco200'
     os.environ['LD_LIBRARY_PATH'] = f"{os.environ.get('LD_LIBRARY_PATH', '')}:/home/autolab/.mujoco/mujoco200/bin:/usr/lib/nvidia"
@@ -74,11 +76,6 @@ def experiment(gpu_id, variant, seed=None):
     obs_dim = int(np.prod(env.observation_space.shape))
     action_dim = int(np.prod(env.action_space.shape))
     reward_dim = 1
-    
-    if variant['algo_params']['separate_train'] == True and variant['algo_params']['pretrain'] == True:
-        variant['algo_params']['z_strategy'] = 'mean'
-        variant['algo_params']['num_iterations'] = 60
-
 
     # instantiate networks
     latent_dim = variant['latent_size']
@@ -98,7 +95,6 @@ def experiment(gpu_id, variant, seed=None):
         input_size=club_input_dim,
         output_size=latent_dim * 2,
         output_activation=torch.tanh,
-        # output_activation_half=True
     )
     
     context_encoder = encoder_model(
@@ -108,14 +104,14 @@ def experiment(gpu_id, variant, seed=None):
         output_activation=torch.tanh,
         layer_norm=variant['algo_params']['layer_norm'] if 'layer_norm' in variant['algo_params'].keys() else False
     )
-    
+
     context_decoder = MlpDecoder(
         hidden_sizes=[200, 200, 200],
         input_size=latent_dim+obs_dim+action_dim,
-        output_size=2 * (reward_dim + obs_dim) if variant['algo_params']['use_next_obs_in_context'] else 2 * reward_dim,
+        output_size=2*(reward_dim+obs_dim) if variant['algo_params']['use_next_obs_in_context'] else 2*reward_dim,
         layer_norm=variant['algo_params']['layer_norm'] if 'layer_norm' in variant['algo_params'].keys() else False
     )
-
+    
     classifier = MlpDecoder(
         hidden_sizes=[net_size],
         input_size=context_encoder_output_dim,
@@ -210,8 +206,6 @@ def experiment(gpu_id, variant, seed=None):
     eval_tasks = np.array(list(set(range(len(tasks))).difference(train_tasks)))
     goal_radius = variant['env_params']['goal_radius'] if 'goal_radius' in variant['env_params'] else 1
     
-    task_dynamics.load(os.path.join(variant['algo_params']['data_dir'], 'dynamics'))
-    
     # Choose algorithm
     algo_type = variant['algo_type']
     algorithm = CERTAINSoftActorCritic(
@@ -226,50 +220,10 @@ def experiment(gpu_id, variant, seed=None):
         env_name = variant['env_name'],
         **variant['algo_params'],
     )
-    # focal nets=[agent, qf1, qf2, vf, c]
-    # focal_loss
-
-    # CSRO nets=[agent, qf1, qf2, vf, c, club_model]
-    # focal_loss + W * club_loss
-    
-    # CORRO nets=[agent, qf1, qf2, vf, c]
-    # infoNCE_loss
-
-    # UNICORN nets=[agent, qf1, qf2, vf, c, context_decoder]
-    # focal_loss + W * recon_loss
-
-    # CLASSIFIER nets=[agent, qf1, qf2, vf, c, classifier]
-    # classifier_loss
-
-    # CROO nets=[agent, qf1, qf2, vf, c, behavior_encoder, context_decoder]
-
-    # optionally load pre-trained weights
-    if variant['path_to_weights'] is not None:
-        path = variant['path_to_weights']
-        epoch = variant['epoch_to_weights']
-        agent_ckpt = torch.load(os.path.join(path, "seed"+str(seed), f'agent_itr_{epoch}.pth'))
-        club_model.load_state_dict(agent_ckpt['club_model'])
-        context_encoder.load_state_dict(agent_ckpt['context_encoder'])
-        qf1.load_state_dict(agent_ckpt['qf1'])
-        qf2.load_state_dict(agent_ckpt['qf2'])
-        vf.load_state_dict(agent_ckpt['vf'])
-        algorithm.networks[-3].load_state_dict(agent_ckpt['target_vf'])
-        policy.load_state_dict(agent_ckpt['policy'])
-        c.load_state_dict(agent_ckpt['c'])
-        context_decoder.load_state_dict(agent_ckpt['context_decoder'])
-        # behavior_encoder.load_state_dict(agent_ckpt['behavior_encoder'])
-
-    # optional GPU mode
     ptu.set_gpu_mode(variant['util_params']['use_gpu'], variant['util_params']['gpu_id'])
-    if ptu.gpu_enabled():
-        algorithm.to()
-
-    # debugging triggers a lot of printing and logs to a debug directory
-    DEBUG = variant['util_params']['debug']
+    DEBUG = False
     os.environ['DEBUG'] = str(int(DEBUG))
-
-    # create logging directory
-    # TODO support Docker
+    
     exp_id = 'debug' if DEBUG else variant['util_params']['exp_name']
     experiment_log_dir = setup_logger(
         variant['env_name'],
@@ -280,16 +234,30 @@ def experiment(gpu_id, variant, seed=None):
         snapshot_mode="gap_and_last",
         snapshot_gap=5
     )
+    tensorboard_log_dir = experiment_log_dir + '/tensorboard_few_shot'
+    Path(tensorboard_log_dir).mkdir(parents=True, exist_ok=True)
+    tb_writer = SummaryWriter(log_dir=tensorboard_log_dir)
 
-    # optionally save eval trajectories as pkl files
-    if variant['algo_params']['dump_eval_paths']:
-        pickle_dir = experiment_log_dir + '/eval_trajectories'
-        Path(pickle_dir).mkdir(parents=True, exist_ok=True)
 
-    tb_writer = SummaryWriter(log_dir=experiment_log_dir)
-    # run the algorithm
-    algorithm.train(tb_writer)
+    # directory
+    exp_name = variant['util_params']['exp_name']
+    base_log_dir = variant['util_params']['base_log_dir']
+    exp_prefix = variant['env_name']
+    log_dir = Path(os.path.join(base_log_dir, exp_prefix.replace("_", "-"), exp_name, f"seed{seed}"))
+    file_list = glob.glob(os.path.join(log_dir, 'agent_*.pth'))
+    file_list.sort(key=lambda x: int(x.split('_')[-1].split('.')[0]))
+    print(file_list)
 
+    for i, file in enumerate(file_list):
+        agent_ckpt = torch.load(str(file))
+        algorithm.agent.policy.load_state_dict(agent_ckpt['policy'])
+        algorithm.agent.uncertainty_mlp.load_state_dict(agent_ckpt['uncertainty_mlp'])
+        algorithm.agent.context_encoder.load_state_dict(agent_ckpt['context_encoder'])
+        # algorithm.agent.context_decoder.load_state_dict(agent_ckpt_1['context_decoder'])
+        if ptu.gpu_enabled():
+            algorithm.to()
+        algorithm.show_few_shot_return(tb_writer, 5 * i, 5, i==(len(file_list)-1))
+    
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
     # assume dicts have same keys
@@ -306,16 +274,14 @@ def deep_update_dict(fr, to):
 @click.option('--gpu', default="0,1,2,3", type=str, help="Comma-separated list of gpu.")
 @click.option('--seed', default="0", type=str, help="Comma-separated list of seeds.")
 @click.option('--exp_name', default=None)
-@click.option('--pretrain', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
-@click.option('--algo_type', type=click.Choice(['FOCAL', 'RECON', 'UNICORN', 'CLASSIFIER', 'IDAQ'], case_sensitive=False), default=None)
+@click.option('--algo_type', type=click.Choice(['FOCAL', 'CSRO', 'CORRO', 'UNICORN', 'CLASSIFIER', 'IDAQ'], case_sensitive=False), default=None)
 @click.option('--train_z0_policy', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)
 @click.option('--r_thres', default=None)
-@click.option('--use_relabel', type=click.Choice(['true', 'false'], case_sensitive=False), default='false')
-@click.option('--offline_data_quality', type=click.Choice(['mix', 'low', 'mid', 'expert'], case_sensitive=False), default='mix') # [mix, low, mid, expert]
-def main(config, mujoco_version, gpu, seed, exp_name=None, pretrain=None, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None, use_relabel=None, offline_data_quality=None):
-    ''' launch experiment '''
+# python show_path_all.py configs/point-robot.json --gpu 0 --seed 0 --exp_name FOCAL0135/focal_mix_baseline --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
+# python show_path_all.py configs/point-robot.json --gpu 0,1,2,3 --seed 0,3,4,9 --exp_name CLASSIFIER0349/classifier_mix_z0_hvar_p10_weighted --algo_type CLASSIFIER --train_z0_policy true --use_hvar true --z_strategy weighted
+def main(config, mujoco_version, gpu, seed, exp_name=None, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
     variant = default_config
     if config:
         with open(os.path.join(config)) as f:
@@ -328,8 +294,7 @@ def main(config, mujoco_version, gpu, seed, exp_name=None, pretrain=None, algo_t
     
     if not (exp_name == None):
         variant['util_params']['exp_name'] = exp_name
-    if not (pretrain == None):
-        variant['algo_params']['pretrain'] = pretrain.lower() == 'true'
+    variant['algo_params']['pretrain'] = True
     if not (algo_type == None):
         variant['algo_type'] = algo_type.upper()
     if not (train_z0_policy == None):
@@ -340,14 +305,8 @@ def main(config, mujoco_version, gpu, seed, exp_name=None, pretrain=None, algo_t
         variant['algo_params']['z_strategy'] = z_strategy
     if not (r_thres == None):
         variant['algo_params']['r_thres'] = float(r_thres)
-    if not (use_relabel == None):
-        variant['algo_params']['use_relabel'] = use_relabel.lower() == 'true'
-    if not (offline_data_quality == None):
-        variant['algo_params']['offline_data_quality'] = offline_data_quality
 
-    # multi-processing
     seed = [int(s) for s in seed.split(",")]
-    print(f"Parsed seeds: {seed}")
     if len(seed) > 1:
         p = mp.Pool(2*len(gpu))
         args = []

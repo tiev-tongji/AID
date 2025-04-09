@@ -174,6 +174,27 @@ def experiment(gpu_id, variant, seed=None):
         policy,
         **variant['algo_params']
     )
+    
+    if variant['algo_params']['use_next_obs_in_context']:
+        task_dynamics =  MultiTaskDynamics(num_tasks=len(tasks), 
+            hidden_size=net_size, 
+            num_hidden_layers=3, 
+            action_dim=action_dim, 
+            obs_dim=obs_dim,
+            reward_dim=1,
+            use_next_obs_in_context=variant['algo_params']['use_next_obs_in_context'],
+            ensemble_size=variant['algo_params']['ensemble_size'],
+            dynamics_weight_decay=[2.5e-5, 5e-5, 7.5e-5, 7.5e-5])
+    else:
+        task_dynamics = MultiTaskDynamics(num_tasks=len(tasks), 
+            hidden_size=net_size, 
+            num_hidden_layers=2, 
+            action_dim=action_dim, 
+            obs_dim=obs_dim,
+            reward_dim=1,
+            use_next_obs_in_context=variant['algo_params']['use_next_obs_in_context'],
+            ensemble_size=variant['algo_params']['ensemble_size'],
+            dynamics_weight_decay=[2.5e-5, 5e-5, 7.5e-5])
 
     # Setting up tasks
     if 'randomize_tasks' in variant.keys() and variant['randomize_tasks']:
@@ -190,7 +211,7 @@ def experiment(gpu_id, variant, seed=None):
         env=env,
         train_tasks=train_tasks,
         eval_tasks=eval_tasks,
-        nets=[agent, qf1, qf2, vf, c, club_model, context_decoder, classifier, reward_models, dynamic_models],
+        nets=[agent, qf1, qf2, vf, c, club_model, context_decoder, classifier, reward_models, dynamic_models, task_dynamics],
         latent_dim=latent_dim,
         goal_radius=goal_radius,
         seed=seed,
