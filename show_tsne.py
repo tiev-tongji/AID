@@ -1,3 +1,6 @@
+"""
+Visualize the t-SNE plot of task embeddings.
+"""
 import os
 import pathlib
 import numpy as np
@@ -16,7 +19,7 @@ from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
 from rlkit.core.rl_algorithm import OfflineMetaRLAlgorithm
-from rlkit.torch.sac.sac import CERTAINSoftActorCritic
+from rlkit.torch.sac.certain import CERTAINSoftActorCritic
 from rlkit.torch.sac.croo import CROOSoftActorCritic
 from rlkit.torch.sac.unicorn import UNICORNSoftActorCritic
 from rlkit.torch.sac.classifier import CLASSIFIERSoftActorCritic 

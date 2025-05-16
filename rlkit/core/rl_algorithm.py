@@ -87,10 +87,6 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         self.n_trj                           = kwargs['n_trj']
         self.allow_eval                      = kwargs['allow_eval']
         self.mb_replace                      = kwargs['mb_replace']
-        # self.use_FOCAL_cl                    = kwargs['use_FOCAL_cl']
-        # self.use_club                        = kwargs['use_club']
-        # self.club_model_loss_weight          = kwargs['club_model_loss_weight']
-        # self.club_loss_weight                = kwargs['club_loss_weight']
         self.train_z0_policy                 = kwargs['train_z0_policy']
         self.separate_train                  = kwargs['separate_train']
         self.pretrain                        = kwargs['pretrain']
@@ -253,10 +249,6 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         if self._can_evaluate():
             self.evaluate(epoch)
             table_keys = logger.get_table_key_set()
-            # if self._old_table_keys is not None:
-            #     assert table_keys == self._old_table_keys, (
-            #         "Table keys cannot change from iteration to iteration."
-            #     )
             self._old_table_keys = table_keys
             logger.record_tabular("Number of train steps total", self._n_train_steps_total)
             logger.record_tabular("Number of env steps total",   self._n_env_steps_total)
@@ -591,32 +583,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             self.draw_tsne(epoch, logger._snapshot_dir)
     
     ##### draw #####
-    def draw_tsne(self, epoch, logdir=None):
-        # sample offline context zs
-        fig_save_dir = logdir + '/figures'
-        if not os.path.exists(fig_save_dir):
-            os.makedirs(fig_save_dir)
-        n_points = 100
-        offline_train_zs, offline_test_zs, online_train_zs, online_test_zs = [], [], [], []
-        for i in range(n_points):
-            print(f'Clollect {i} traj...')
-            offline_train_zs.append(self.collect_offline_zs(self.train_tasks, self.replay_buffer))
-            offline_test_zs.append(self.collect_offline_zs(self.eval_tasks, self.eval_buffer))
-            online_train_zs.append(self.collect_online_zs(self.train_tasks))
-            online_test_zs.append(self.collect_online_zs(self.eval_tasks))
-        offline_train_zs = np.stack(offline_train_zs, axis=1)
-        offline_test_zs = np.stack(offline_test_zs, axis=1)
-        online_train_zs = np.stack(online_train_zs, axis=1)
-        online_test_zs = np.stack(online_test_zs, axis=1)
-            
-        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_train_zs_{epoch}.png', zs=[offline_train_zs], subplot_title_lst=[f'offline_train_zs_{epoch}'])
-        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_test_zs_{epoch}.png', zs=[offline_test_zs], subplot_title_lst=[f'offline_test_zs_{epoch}'])
-        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_zs_{epoch}.png', zs=[online_train_zs], subplot_title_lst=[f'online_train_zs_{epoch}'])
-        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_zs_{epoch}.png', zs=[online_test_zs], subplot_title_lst=[f'online_test_zs_{epoch}'])
-        # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_np_zs_{epoch}.png', zs=[online_train_np_zs], subplot_title_lst=[f'online_train_np_zs_{epoch}'])
-        # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_np_zs_{epoch}.png', zs=[online_test_np_zs], subplot_title_lst=[f'online_test_np_zs_{epoch}'])
-
-    def draw_heatmap(self, matrix, task_labels, title, save_path, figsize=(16, 12)):
+    def _draw_heatmap(self, matrix, task_labels, title, save_path, figsize=(16, 12)):
         """
         绘制热力图并保存图片
 
@@ -640,7 +607,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         plt.savefig(save_path, dpi=400, bbox_inches='tight')
         plt.close()
 
-    def compute_distance_matrix(self, z_array, distance_metric='euclidean'):
+    def _compute_distance_matrix(self, z_array, distance_metric='euclidean'):
         """
         计算给定 z_array 的距离矩阵
         参数：
@@ -669,7 +636,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
 
         return dist_matrix
 
-    def draw_z_trajectory(self, task_labels, z_weighted_list, z_mean_list, latent_dim, save_path, figsize=(16, 10)):
+    def _draw_z_trajectory(self, task_labels, z_weighted_list, z_mean_list, latent_dim, save_path, figsize=(16, 10)):
         """
         绘制 z_weighted 和 z_mean 随任务变化的曲线图，并保存图像
 
@@ -712,7 +679,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         plt.savefig(save_path, dpi=400, bbox_inches='tight')
         plt.close()
 
-    def draw_path_plot(self, paths, heterodastic_vars, task, save_path, min_5=None, max_95=None, is_half_circle=True):
+    def _draw_path_plot(self, paths, heterodastic_vars, task, save_path, min_5=None, max_95=None, is_half_circle=True):
         """
         绘制路径图，包括轨迹、散点以及目标和起始点标记，同时添加色条和图例
 
@@ -833,7 +800,35 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         plt.savefig(save_path, dpi=400, bbox_inches='tight')
         plt.close()
 
+    def draw_tsne(self, epoch, logdir=None):
+        # sample offline context zs
+        fig_save_dir = logdir + '/figures'
+        if not os.path.exists(fig_save_dir):
+            os.makedirs(fig_save_dir)
+        n_points = 100
+        offline_train_zs, offline_test_zs, online_train_zs, online_test_zs = [], [], [], []
+        for i in range(n_points):
+            print(f'Clollect {i} traj...')
+            offline_train_zs.append(self.collect_offline_zs(self.train_tasks, self.replay_buffer))
+            offline_test_zs.append(self.collect_offline_zs(self.eval_tasks, self.eval_buffer))
+            online_train_zs.append(self.collect_online_zs(self.train_tasks))
+            online_test_zs.append(self.collect_online_zs(self.eval_tasks))
+        offline_train_zs = np.stack(offline_train_zs, axis=1)
+        offline_test_zs = np.stack(offline_test_zs, axis=1)
+        online_train_zs = np.stack(online_train_zs, axis=1)
+        online_test_zs = np.stack(online_test_zs, axis=1)
+            
+        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_train_zs_{epoch}.png', zs=[offline_train_zs], subplot_title_lst=[f'offline_train_zs_{epoch}'])
+        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'offline_test_zs_{epoch}.png', zs=[offline_test_zs], subplot_title_lst=[f'offline_test_zs_{epoch}'])
+        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_zs_{epoch}.png', zs=[online_train_zs], subplot_title_lst=[f'online_train_zs_{epoch}'])
+        self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_zs_{epoch}.png', zs=[online_test_zs], subplot_title_lst=[f'online_test_zs_{epoch}'])
+        # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_train_np_zs_{epoch}.png', zs=[online_train_np_zs], subplot_title_lst=[f'online_train_np_zs_{epoch}'])
+        # self.vis_task_embeddings(save_dir = fig_save_dir, fig_name=f'online_test_np_zs_{epoch}.png', zs=[online_test_np_zs], subplot_title_lst=[f'online_test_np_zs_{epoch}'])
+
     def draw_z(self, epoch, logdir, is_z_random_switch=False, distance_metric='euclidean'):
+        """_summary_
+        该函数会计算 z_weighted 和 z_mean 的距离矩阵，绘制 z_weighted 和 z_mean 随任务变化的曲线图，和热力图
+        """
         z_weighted_list = []
         z_mean_list = []
         task_labels = []
@@ -854,7 +849,8 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         ############################
         # z 可视化
         ############################
-        self.draw_z_trajectory(
+        # 绘制 z_weighted 和 z_mean 随任务变化的曲线图
+        self._draw_z_trajectory(
             task_labels=task_labels,
             z_weighted_list=z_weighted_list,
             z_mean_list=z_mean_list,
@@ -865,16 +861,16 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         # 计算并绘制 z_weighted 的热力图
         z_weighted_array = np.array(z_weighted_list)
         z_mean_array = np.array(z_mean_list)
-        dist_matrix_weighted = self.compute_distance_matrix(z_weighted_array, distance_metric)
-        self.draw_heatmap(
+        dist_matrix_weighted = self._compute_distance_matrix(z_weighted_array, distance_metric)
+        self._draw_heatmap(
             matrix=dist_matrix_weighted,
             task_labels=task_labels,
             title=f'Heatmap of z_weighted across tasks (Epoch {epoch})',
             save_path=os.path.join(fig_save_dir, f'z_weighted_heatmap_{epoch}_{self.algo_type}.pdf')
         )
         # 计算并绘制 z_mean 的热力图
-        dist_matrix_mean = self.compute_distance_matrix(z_mean_array, distance_metric)
-        self.draw_heatmap(
+        dist_matrix_mean = self._compute_distance_matrix(z_mean_array, distance_metric)
+        self._draw_heatmap(
             matrix=dist_matrix_mean,
             task_labels=task_labels,
             title=f'Heatmap of z_mean across tasks (Epoch {epoch})',
@@ -882,6 +878,9 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         )
 
     def draw_path(self, epoch, logdir, min_5 = None, max_95 = None, is_z_random_switch=False):
+        """_summary_
+        该函数会绘制point-robot环境下两条轨迹的路径图，包括轨迹、散点以及目标和起始点标记，同时添加色条和图例
+        """
         fig_save_dir = logdir + f'/figures_itr_{epoch}'
         # fig_save_dir = logdir + '/figures'
         if not os.path.exists(fig_save_dir):
@@ -895,7 +894,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             # fig, axs = plt.subplots(1, 2, figsize=(24, 10))
             
             save_path = f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_{idx}.pdf'
-            self.draw_path_plot(
+            self._draw_path_plot(
                 paths=paths,
                 heterodastic_vars=heterodastic_vars,
                 task=idx,        # 当前任务编号或标签
@@ -905,7 +904,10 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 is_half_circle=True,
             )
 
-    def draw_neg_path(self, epoch, logdir, min_5 = None, max_95 = None, is_z_random_switch=False):
+    def draw_OOD_task_path(self, epoch, logdir, min_5 = None, max_95 = None, is_z_random_switch=False):
+        """
+        该函数会绘制point-robot环境下OOD task的路径图，包括轨迹、散点以及目标和起始点标记，同时添加色条和图例
+        """
         fig_save_dir = logdir + '/figures_neg'
         if not os.path.exists(fig_save_dir):
             os.makedirs(fig_save_dir)
@@ -915,7 +917,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             else:
                 paths, heterodastic_vars = self.collect_online_paths(idx, 0, 0, None, return_heterodastic_var=True, neg_task=True)
             save_path = f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_{idx}_neg.pdf'
-            self.draw_path_plot(
+            self._draw_path_plot(
                 paths=paths,
                 heterodastic_vars=heterodastic_vars,
                 task=idx,        # 当前任务编号或标签
@@ -925,7 +927,11 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 is_half_circle=False,
             )
     
-    def draw_manual_path(self, epoch, logdir, min_5 = None, max_95 = None, is_z_random_switch=False, distance_metric='euclidean'): 
+    def draw_manual_task_path(self, epoch, logdir, min_5 = None, max_95 = None, is_z_random_switch=False, distance_metric='euclidean'): 
+        """_summary_
+        该函数会绘制point-robot环境下手动指定的任务的路径图，包括轨迹、散点以及目标和起始点标记，同时添加色条和图例
+        该函数会计算 z_weighted 和 z_mean 的距离矩阵，绘制 z_weighted 和 z_mean 随任务变化的曲线图，和热力图
+        """
         fig_save_dir = logdir + '/figures_'
         if not os.path.exists(fig_save_dir):
             os.makedirs(fig_save_dir)
@@ -954,7 +960,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 else:
                     save_path = f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_task{task}_goal{idx_goal}_neg.pdf'
                 
-                self.draw_path_plot(
+                self._draw_path_plot(
                     paths=paths,
                     heterodastic_vars=heterodastic_vars,
                     task=task,        # 当前任务编号或标签
@@ -967,7 +973,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             ############################
             # z 可视化
             ############################
-            self.draw_z_trajectory(
+            self._draw_z_trajectory(
                 task_labels=task_labels,
                 z_weighted_list=z_weighted_list,
                 z_mean_list=z_mean_list,
@@ -978,23 +984,26 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             # 计算并绘制 z_weighted 的热力图
             z_weighted_array = np.array(z_weighted_list)
             z_mean_array = np.array(z_mean_list)
-            dist_matrix_weighted = self.compute_distance_matrix(z_weighted_array, distance_metric)
-            self.draw_heatmap(
+            dist_matrix_weighted = self._compute_distance_matrix(z_weighted_array, distance_metric)
+            self._draw_heatmap(
                 matrix=dist_matrix_weighted,
                 task_labels=task_labels,
                 title=f'Heatmap of z_weighted across tasks (Epoch {epoch})',
                 save_path=os.path.join(fig_save_dir, f'z_weighted_heatmap_{epoch}_{self.algo_type}_goal{idx_goal}.pdf')
             )
             # 计算并绘制 z_mean 的热力图
-            dist_matrix_mean = self.compute_distance_matrix(z_mean_array, distance_metric)
-            self.draw_heatmap(
+            dist_matrix_mean = self._compute_distance_matrix(z_mean_array, distance_metric)
+            self._draw_heatmap(
                 matrix=dist_matrix_mean,
                 task_labels=task_labels,
                 title=f'Heatmap of z_mean across tasks (Epoch {epoch})',
                 save_path=os.path.join(fig_save_dir, f'z_mean_heatmap_{epoch}_{self.algo_type}_goal{idx_goal}.pdf')
             )
 
-    def draw_in_and_out_of_distribution_path(self, epoch, logdir, min_5 = None, max_95 = None, is_z_random_switch=False, distance_metric='euclidean', path=None):
+    def draw_ood_context_path(self, epoch, logdir, min_5 = None, max_95 = None, path=None):
+        """_summary_
+        该函数会绘制point-robot环境下第一条轨迹为partial OOD context的路径图，包括轨迹、散点以及目标和起始点标记，同时添加色条和图例
+        """
         fig_save_dir = logdir + '/figures_in_out'
         if not os.path.exists(fig_save_dir):
             os.makedirs(fig_save_dir)
@@ -1002,11 +1011,11 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         first_path = []
     
         for i, idx in enumerate(list(self.eval_tasks)):
-            paths, heterodastic_vars = self.collect_in_and_out_of_distribution_paths(idx, epoch, 0, self.eval_buffer, return_heterodastic_var=True, first_path= [path[i]] if path is not None else None)
+            paths, heterodastic_vars = self.collect_ood_context_paths(idx, epoch, 0, self.eval_buffer, return_heterodastic_var=True, first_path= [path[i]] if path is not None else None)
 
             save_path = f'{fig_save_dir}/traj_{epoch}_{self.algo_type}_{idx}.pdf'
                 
-            self.draw_path_plot(
+            self._draw_path_plot(
                 paths=paths,
                 heterodastic_vars=heterodastic_vars,
                 task=idx,        # 当前任务编号或标签
@@ -1020,6 +1029,9 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         return first_path
         
     def show_return(self, tb_writer, epoch, is_last=False):
+        """_summary_
+        该函数会计算并记录在线和离线任务的zero_shot one_shot平均回报，并将结果记录到日志中
+        """
         if self.tb_writer is None:
             self.tb_writer = tb_writer
         if self.eval_statistics is None:
@@ -1067,6 +1079,9 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
             self.draw_path(epoch, logger._snapshot_dir+'/tensorboard_' + str(self.first_path_len))
 
     def show_few_shot_return(self, tb_writer, epoch, num_shots=5, is_last=False):
+        """_summary_
+        该函数会计算并记录在线和离线任务的few_shot平均回报，并将结果记录到日志中
+        """
         if self.tb_writer is None:
             self.tb_writer = tb_writer
         if self.eval_statistics is None:
@@ -1099,6 +1114,9 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         #     self.draw_path(epoch, logger._snapshot_dir+'/tensorboard_few_shot')
 
     def show_z_random_switch(self, tb_writer, epoch, is_last=False):
+        """_summary_
+        该函数会计算并记录在线和离线任务的z_random平均回报，并将结果记录到日志中
+        """
         if self.tb_writer is None:
             self.tb_writer = tb_writer
         if self.eval_statistics is None:
@@ -1300,7 +1318,7 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
         else:
             return paths
 
-    def collect_in_and_out_of_distribution_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False, in_distribution_ratio=0.25, first_path=None):
+    def collect_ood_context_paths(self, idx, epoch, run, buffer, num_models=12, return_heterodastic_var=False, in_distribution_ratio=0.25, first_path=None):
         self.task_idx = idx
         self.env.reset_task(idx)
 
@@ -1384,7 +1402,6 @@ class OfflineMetaRLAlgorithm(metaclass=abc.ABCMeta):
                 max_path_length=self.first_path_len if i == 0 else None)
             paths += path
             num_transitions += num
-            # if num_transitions >= self.num_exp_traj_eval * self.max_path_length and self.agent.context is not None:
             heterodastic_var = self.agent.infer_posterior(self.agent.context).squeeze().cpu().numpy()
 
         if self.sparse_rewards:

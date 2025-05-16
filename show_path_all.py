@@ -1,6 +1,5 @@
 """
-Launcher for experiments with CSRO
-
+Visualize the trajectory of the agent at each saved timestep.
 """
 import os
 import glob
@@ -45,7 +44,7 @@ from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
-from rlkit.torch.sac.sac import CERTAINSoftActorCritic
+from rlkit.torch.sac.certain import CERTAINSoftActorCritic
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
@@ -455,9 +454,9 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
     
     # if variant['env_name'] == 'point-robot':
     #     # algorithm.draw_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = min_5, max_95 = max_95)
-    #     # algorithm.draw_neg_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = min_5, max_95 = max_95)
-    #     # algorithm.draw_manual_path(variant['algo_params']['num_iterations'], str(log_dir_1))
-    #     first_path = algorithm.draw_in_and_out_of_distribution_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = 0.9, max_95 = max_95)
+    #     # algorithm.draw_OOD_task_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = min_5, max_95 = max_95)
+    #     # algorithm.draw_manual_task_path(variant['algo_params']['num_iterations'], str(log_dir_1))
+    #     first_path = algorithm.draw_ood_context_path(variant['algo_params']['num_iterations'], str(log_dir_1), min_5 = 0.9, max_95 = max_95)
     # # algorithm.draw_z(variant['algo_params']['num_iterations'], str(log_dir_1))
 
 
@@ -495,8 +494,8 @@ def experiment(gpu_id, variant, seed=None, exp_names=None):
     
     # if variant['env_name'] == 'point-robot':
     #     # algorithm_base.draw_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = min_5, max_95 = max_95)
-    #     # algorithm_base.draw_neg_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = min_5, max_95 = max_95)
-    #     algorithm_base.draw_in_and_out_of_distribution_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = 0.9, max_95 = max_95, path = first_path)
+    #     # algorithm_base.draw_OOD_task_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = min_5, max_95 = max_95)
+    #     algorithm_base.draw_ood_context_path(variant['algo_params']['num_iterations'], str(log_dir_2), min_5 = 0.9, max_95 = max_95, path = first_path)
     # # algorithm.draw_z(variant['algo_params']['num_iterations'], str(log_dir_2))
     
 def deep_update_dict(fr, to):

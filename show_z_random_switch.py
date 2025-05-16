@@ -1,6 +1,5 @@
 """
-Launcher for experiments with CSRO
-
+Reintroduce the model and compute the average reward of the random switch for z.
 """
 import os
 import glob
@@ -44,7 +43,7 @@ from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
-from rlkit.torch.sac.sac import CERTAINSoftActorCritic
+from rlkit.torch.sac.certain import CERTAINSoftActorCritic
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
@@ -238,11 +237,6 @@ def experiment(gpu_id, variant, seed=None):
         algorithm.show_z_random_switch(tb_writer, 5 * i, i==(len(file_list)-1))
         print(f"{i==(len(file_list)-1)}")
 
-    # # optionally save eval trajectories as pkl files
-    # if variant['algo_params']['dump_eval_paths']:
-    #     pickle_dir = experiment_log_dir + '/eval_trajectories'
-    #     Path(pickle_dir).mkdir(parents=True, exist_ok=True)
-
 def deep_update_dict(fr, to):
     ''' update dict of dicts with new values '''
     # assume dicts have same keys
@@ -264,9 +258,7 @@ def deep_update_dict(fr, to):
 @click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)
 @click.option('--r_thres', default=None)
-# python show_z_random_switch.py configs/point-robot.json --exp_name CLASSIFIER034/classifier_mix_z0_hvar_p10_weighted --gpu 5,6,7 --seed 0,3,4 --algo_type CLASSIFIER --z_strategy weighted --train_z0_policy true --use_hvar true
 # python show_z_random_switch.py configs/point-robot.json --exp_name FOCAL0135/focal_mix_z0_hvar_p10_weighted/ --gpu 5,6,7 --seed 0,1,3,5 --algo_type FOCAL --z_strategy weighted --train_z0_policy true --use_hvar true
-# python show_z_random_switch.py configs/point-robot.json --exp_name UNICORN1237/unicorn_mix_z0_hvar_weighted/ --gpu 5,6,7 --seed 1,2,3,7 --algo_type UNICORN --z_strategy weighted --train_z0_policy true --use_hvar true
 def main(config, mujoco_version, gpu, seed, exp_name=None, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
     variant = default_config
     if config:

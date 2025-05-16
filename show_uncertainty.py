@@ -1,3 +1,6 @@
+"""
+Visualize the distribution, uncertainty, and loss of each sample in the offline dataset.
+"""
 import os
 import pathlib
 import numpy as np
@@ -37,7 +40,7 @@ from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
-from rlkit.torch.sac.sac import CERTAINSoftActorCritic
+from rlkit.torch.sac.certain import CERTAINSoftActorCritic
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu

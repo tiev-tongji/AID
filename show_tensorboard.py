@@ -1,3 +1,7 @@
+"""
+A utility class for visualizing TensorBoard data.
+This class can extract data from a specified TensorBoard log directory and plot curves showing the mean and standard deviation.
+"""
 import os
 import numpy as np
 import seaborn as sns
@@ -151,46 +155,46 @@ def visualize_tensorboard(base_dirs, tags=['tag1', 'tag2'], plot_type='mean_std'
     plot_tensorboard_data(all_seed_data_dict, tags, plot_type, save_path, names, tag_names=tags_names, num_train_steps_per_itr=num_train_steps_per_itr)
 
 if __name__ == '__main__':
-    # base_dir1 = ['logs_1/point-robot/FOCAL0135/focal_mix_baseline', 'logs_1/point-robot/FOCAL0135/focal_mix_z0_hvar_p10_weighted',
-    #              'logs_1/point-robot/CLASSIFIER0349/classifier_mix_baseline', 'logs_1/point-robot/CLASSIFIER0349/classifier_mix_z0_hvar_p10_weighted',
-    #              'logs_1/point-robot/UNICORN1237/unicorn_mix_baseline', 'logs_1/point-robot/UNICORN1237/unicorn_mix_z0_hvar_weighted',
-    #              'logs_1/point-robot/FOCAL0135/idaq_mix_baseline']
+    base_dir1 = ['logs/point-robot/FOCAL0135/focal_mix_baseline', 'logs/point-robot/FOCAL0135/focal_mix_z0_hvar_p10_weighted',
+                 'logs/point-robot/CLASSIFIER0349/classifier_mix_baseline', 'logs/point-robot/CLASSIFIER0349/classifier_mix_z0_hvar_p10_weighted',
+                 'logs/point-robot/UNICORN1237/unicorn_mix_baseline', 'logs/point-robot/UNICORN1237/unicorn_mix_z0_hvar_p2_weighted',
+                 'logs/point-robot/FOCAL0135/idaq_mix_baseline']
 
-    # base_dir2 = ['logs_1/ant-goal/FOCAL0356/focal_mix_baseline', 'logs_1/ant-goal/FOCAL0356/focal_mix_z0_hvar_p0.1_weighted',
-    #              'logs_1/ant-goal/CLASSIFIER0123/classifier_mix_baseline', 'logs_1/ant-goal/CLASSIFIER0123/classifier_mix_z0_hvar_p5_weighted',
-    #              'logs_1/ant-goal/UNICORN1234/unicorn_mix_baseline0.1', 'logs_1/ant-goal/UNICORN1234/unicorn_mix_z0_p2_hvar0.1_weighted',
-    #              'logs_1/ant-goal/FOCAL0356/idaq_mix_baseline_-650']
+    base_dir2 = ['logs/ant-goal/FOCAL0356/focal_mix_baseline', 'logs/ant-goal/FOCAL0356/focal_mix_z0_hvar_p0.1_weighted',
+                 'logs/ant-goal/CLASSIFIER0123/classifier_mix_baseline', 'logs/ant-goal/CLASSIFIER0123/classifier_mix_z0_hvar_p5_weighted',
+                 'logs/ant-goal/UNICORN1234/unicorn_mix_baseline0.1', 'logs/ant-goal/UNICORN1234/unicorn_mix_z0_p2_hvar0.1_weighted',
+                 'logs/ant-goal/FOCAL0356/idaq_mix_baseline_-650']
 
-    # base_dir3 = ['logs_1/cheetah-vel/FOCAL04710/focal_mix_baseline', 'logs_1/cheetah-vel/FOCAL04710/focal_mix_z0_hvar_p2_weighted',
-    #              'logs_1/cheetah-vel/CLASSIFIER_0256/classifier_mix_baseline', 'logs_1/cheetah-vel/CLASSIFIER_0256/classifier_mix_z0_hvar_p10_weighted',
-    #              'logs_1/cheetah-vel/UNICORN_0123/unicorn_mix_baseline0.5', 'logs_1/cheetah-vel/UNICORN_0123/unicorn_z0_p0.5_hvar_0.5_weighted',
-    #              'logs_1/cheetah-vel/FOCAL04710/idaq_mix_baseline']
+    base_dir3 = ['logs/cheetah-vel/FOCAL04710/focal_mix_baseline', 'logs/cheetah-vel/FOCAL04710/focal_mix_z0_hvar_p2_weighted',
+                 'logs/cheetah-vel/CLASSIFIER_0256/classifier_mix_baseline', 'logs/cheetah-vel/CLASSIFIER_0256/classifier_mix_z0_hvar_p10_weighted',
+                 'logs/cheetah-vel/UNICORN_0123/unicorn_mix_baseline0.5', 'logs/cheetah-vel/UNICORN_0123/unicorn_mix_z0_hvar_p0.5_0.5_weighted',
+                 'logs/cheetah-vel/FOCAL04710/idaq_mix_baseline']
     
-    # base_dir4 = ['logs_1/walker-rand-params/FOCAL0145/focal_mix_baseline', 'logs_1/walker-rand-params/FOCAL0145/focal_mix_z0_hvar_p5_weighted',
-    #              'logs_1/walker-rand-params/CLASSIFIER0124/classifier_mix_baseline', 'logs_1/walker-rand-params/CLASSIFIER0124/classifier_mix_z0_hvar_p25_weighted',
-    #              'logs_1/walker-rand-params/UNICORN0123/unicorn_mix_baseline0.5', 'logs_1/walker-rand-params/UNICORN0123/unicorn_mix_z0_p2_hvar0.5_weighted',
-    #              'logs_1/walker-rand-params/FOCAL0145/idaq_mix_baseline_r80']
+    base_dir4 = ['logs/walker-rand-params/FOCAL0145/focal_mix_baseline', 'logs/walker-rand-params/FOCAL0145/focal_mix_z0_hvar_p5_weighted',
+                 'logs/walker-rand-params/CLASSIFIER0124/classifier_mix_baseline', 'logs/walker-rand-params/CLASSIFIER0124/classifier_mix_z0_hvar_p25_weighted',
+                 'logs/walker-rand-params/UNICORN0123/unicorn_mix_baseline0.5', 'logs/walker-rand-params/UNICORN0123/unicorn_mix_z0_p2_hvar0.5_weighted',
+                 'logs/walker-rand-params/FOCAL0145/idaq_mix_baseline_r80']
     
-    # base_dir5 = ['logs_1/hopper-rand-params/FOCAL0257/focal_mix_baseline', 'logs_1/hopper-rand-params/FOCAL0257/focal_mix_z0_hvar_p0.1_weighted',
-    #              'logs_1/hopper-rand-params/CLASSIFIER0124/classifier_mix_baseline', 'logs_1/hopper-rand-params/CLASSIFIER0124/classifier_mix_z0_hvar_p10_weighted',
-    #              'logs_1/hopper-rand-params/UNICORN037/unicorn_mix_baseline0.5', 'logs_1/hopper-rand-params/UNICORN037/unicorn_mix_z0_p2_hvar0.5_weighted',
-    #              'logs_1/hopper-rand-params/FOCAL0257/idaq_mix_baseline_r140']
+    base_dir5 = ['logs/hopper-rand-params/FOCAL0257/focal_mix_baseline', 'logs/hopper-rand-params/FOCAL0257/focal_mix_z0_hvar_p0.1_weighted',
+                 'logs/hopper-rand-params/CLASSIFIER0124/classifier_mix_baseline', 'logs/hopper-rand-params/CLASSIFIER0124/classifier_mix_z0_hvar_p10_weighted',
+                 'logs/hopper-rand-params/UNICORN037/unicorn_mix_baseline0.5', 'logs/hopper-rand-params/UNICORN037/unicorn_mix_z0_p2_hvar0.5_weighted',
+                 'logs/hopper-rand-params/FOCAL0257/idaq_mix_baseline_r140']
 
-    # base_dir_low = ['logs/point-robot/low/focal_low_baseline', 'logs/point-robot/low/focal_low_z0_hvar',
-    #              'logs/point-robot/low/classifier_low_baseline', 'logs/point-robot/low/classifier_low_z0_hvar',
-    #              'logs/point-robot/low/unicorn_low_baseline', 'logs/point-robot/low/unicorn_low_z0_hvar']
+    base_dir_low = ['logs/point-robot/low/focal_low_baseline', 'logs/point-robot/low/focal_low_z0_hvar',
+                 'logs/point-robot/low/classifier_low_baseline', 'logs/point-robot/low/classifier_low_z0_hvar',
+                 'logs/point-robot/low/unicorn_low_baseline', 'logs/point-robot/low/unicorn_low_z0_hvar']
 
     base_dir_mid = ['logs/point-robot/mid/focal_mid_baseline', 'logs/point-robot/mid/focal_mid_z0_hvar',
                  'logs/point-robot/mid/classifier_mid_baseline', 'logs/point-robot/mid/classifier_mid_z0_hvar',
                  'logs/point-robot/mid/unicorn_mid_baseline', 'logs/point-robot/mid/unicorn_mid_z0_hvar']
 
-    # base_dir_expert = ['logs/point-robot/expert/focal_expert_baseline', 'logs/point-robot/expert/focal_expert_z0_hvar',
-                #  'logs/point-robot/expert/classifier_expert_baseline', 'logs/point-robot/expert/classifier_expert_z0_hvar',
-                #  'logs/point-robot/expert/unicorn_expert_baseline', 'logs/point-robot/expert/unicorn_expert_z0_hvar']
+    base_dir_expert = ['logs/point-robot/expert/focal_expert_baseline', 'logs/point-robot/expert/focal_expert_z0_hvar',
+                 'logs/point-robot/expert/classifier_expert_baseline', 'logs/point-robot/expert/classifier_expert_z0_hvar',
+                 'logs/point-robot/expert/unicorn_expert_baseline', 'logs/point-robot/expert/unicorn_expert_z0_hvar']
     
-    # base_dirs = [base_dir1, base_dir2, base_dir3, base_dir4, base_dir5]
+    base_dirs = [base_dir1, base_dir2, base_dir3, base_dir4, base_dir5]
     # base_dirs = [base_dir_low]
-    base_dirs = [base_dir_mid]
+    # base_dirs = [base_dir_mid]
     # base_dirs = [base_dir_expert]
     
     names = ['focal', 'focal+ours', 'classifier', 'classifier+ours',  'unicorn', 'unicorn+ours', 'idaq']
@@ -200,9 +204,9 @@ if __name__ == '__main__':
     for base_dir in base_dirs:
         save_path = f'{base_dir[0].split("/")[1]}'
         num_train_steps_per_itr = 1000
-        visualize_tensorboard(base_dir, ['Return/first_OnlineReturn_all_test_tasks'], plot_type, save_path+'1.pdf', names, ["First Episode Test"], num_train_steps_per_itr)
-        visualize_tensorboard(base_dir, ['Return/second_OnlineReturn_all_test_tasks'], plot_type, save_path+'2.pdf', names, ["Second Episode Test"], num_train_steps_per_itr)
-        # visualize_tensorboard(base_dir, ['Return/first_OnlineReturn_all_train_tasks'], plot_type, save_path+'_train1.pdf', names, ["First Episode Train"], num_train_steps_per_itr)
-        # visualize_tensorboard(base_dir, ['Return/second_OnlineReturn_all_train_tasks'], plot_type, save_path+'_train2.pdf', names, ["Second Episode Train"], num_train_steps_per_itr)
-        # visualize_tensorboard(base_dir, ['Return/Average_OfflineReturn_all_test_tasks'], plot_type, save_path+'_offline_test.pdf', names, ["Offline Return Test"], num_train_steps_per_itr)
-        # visualize_tensorboard(base_dir, ['Return/Average_OfflineReturn_all_train_tasks'], plot_type, save_path+'_offline_train.pdf', names, ["Offline Return Train"], num_train_steps_per_itr)
+        visualize_tensorboard(base_dir, ['Return/first_OnlineReturn_all_test_tasks'], plot_type, save_path+'_test1.pdf', names, ["First Episode Test"], num_train_steps_per_itr)
+        visualize_tensorboard(base_dir, ['Return/second_OnlineReturn_all_test_tasks'], plot_type, save_path+'_test2.pdf', names, ["Second Episode Test"], num_train_steps_per_itr)
+        visualize_tensorboard(base_dir, ['Return/first_OnlineReturn_all_train_tasks'], plot_type, save_path+'_train1.pdf', names, ["First Episode Train"], num_train_steps_per_itr)
+        visualize_tensorboard(base_dir, ['Return/second_OnlineReturn_all_train_tasks'], plot_type, save_path+'_train2.pdf', names, ["Second Episode Train"], num_train_steps_per_itr)
+        visualize_tensorboard(base_dir, ['Return/Average_OfflineReturn_all_test_tasks'], plot_type, save_path+'_offline_test.pdf', names, ["Offline Return Test"], num_train_steps_per_itr)
+        visualize_tensorboard(base_dir, ['Return/Average_OfflineReturn_all_train_tasks'], plot_type, save_path+'_offline_train.pdf', names, ["Offline Return Train"], num_train_steps_per_itr)

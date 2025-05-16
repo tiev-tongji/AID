@@ -1,6 +1,5 @@
 """
-Launcher for experiments with CSRO
-
+Compute and log the few-shot average return on both online and offline tasks.
 """
 import os
 import glob
@@ -45,7 +44,7 @@ from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
-from rlkit.torch.sac.sac import CERTAINSoftActorCritic
+from rlkit.torch.sac.certain import CERTAINSoftActorCritic
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
@@ -279,8 +278,8 @@ def deep_update_dict(fr, to):
 @click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)
 @click.option('--r_thres', default=None)
-# python show_path_all.py configs/point-robot.json --gpu 0 --seed 0 --exp_name FOCAL0135/focal_mix_baseline --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
-# python show_path_all.py configs/point-robot.json --gpu 0,1,2,3 --seed 0,3,4,9 --exp_name CLASSIFIER0349/classifier_mix_z0_hvar_p10_weighted --algo_type CLASSIFIER --train_z0_policy true --use_hvar true --z_strategy weighted
+# python show_few_shot_return.py configs/point-robot.json --gpu 0 --seed 0 --exp_name FOCAL0135/focal_mix_baseline --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
+# python show_few_shot_return.py configs/point-robot.json --gpu 0,1,2,3 --seed 0,3,4,9 --exp_name CLASSIFIER0349/classifier_mix_z0_hvar_p10_weighted --algo_type CLASSIFIER --train_z0_policy true --use_hvar true --z_strategy weighted
 def main(config, mujoco_version, gpu, seed, exp_name=None, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
     variant = default_config
     if config:

@@ -43,7 +43,7 @@ from rlkit.envs.wrappers import NormalizedBoxEnv
 from rlkit.torch.sac.policies import TanhGaussianPolicy
 from rlkit.torch.multi_task_dynamics import MultiTaskDynamics
 from rlkit.torch.networks import FlattenMlp, MlpEncoder, RecurrentEncoder, MlpDecoder
-from rlkit.torch.sac.sac import CERTAINSoftActorCritic
+from rlkit.torch.sac.certain import CERTAINSoftActorCritic
 from rlkit.torch.sac.agent import PEARLAgent
 from rlkit.launchers.launcher_util import setup_logger
 import rlkit.torch.pytorch_util as ptu
@@ -56,7 +56,7 @@ def global_seed(seed=0):
     random.seed(seed)
 
 def experiment(gpu_id, variant, seed=None):
-    os.sched_setaffinity(0, [gpu_id*8+i for i in range(8)])
+    os.sched_setaffinity(0, [gpu_id * 8 + i for i in range(8)])
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     # create multi-task environment and sample tasks, normalize obs if provided with 'normalizer.npz'
@@ -162,7 +162,7 @@ def experiment(gpu_id, variant, seed=None):
     c = FlattenMlp(
         hidden_sizes=[net_size, net_size, net_size],
         input_size=obs_dim + action_dim + latent_dim,
-        output_size=1
+        output_size=1,
     )
 
     policy = TanhGaussianPolicy(
@@ -179,27 +179,31 @@ def experiment(gpu_id, variant, seed=None):
         policy,
         **variant['algo_params']
     )
-    
-    if variant['algo_params']['use_next_obs_in_context']:
-        task_dynamics =  MultiTaskDynamics(num_tasks=len(tasks), 
-            hidden_size=net_size, 
-            num_hidden_layers=3, 
-            action_dim=action_dim, 
+
+    if variant["algo_params"]["use_next_obs_in_context"]:
+        task_dynamics = MultiTaskDynamics(
+            num_tasks=len(tasks),
+            hidden_size=net_size,
+            num_hidden_layers=3,
+            action_dim=action_dim,
             obs_dim=obs_dim,
             reward_dim=1,
-            use_next_obs_in_context=variant['algo_params']['use_next_obs_in_context'],
-            ensemble_size=variant['algo_params']['ensemble_size'],
-            dynamics_weight_decay=[2.5e-5, 5e-5, 7.5e-5, 7.5e-5])
+            use_next_obs_in_context=variant["algo_params"]["use_next_obs_in_context"],
+            ensemble_size=variant["algo_params"]["ensemble_size"],
+            dynamics_weight_decay=[2.5e-5, 5e-5, 7.5e-5, 7.5e-5],
+        )
     else:
-        task_dynamics = MultiTaskDynamics(num_tasks=len(tasks), 
-            hidden_size=net_size, 
-            num_hidden_layers=2, 
-            action_dim=action_dim, 
+        task_dynamics = MultiTaskDynamics(
+            num_tasks=len(tasks),
+            hidden_size=net_size,
+            num_hidden_layers=2,
+            action_dim=action_dim,
             obs_dim=obs_dim,
             reward_dim=1,
-            use_next_obs_in_context=variant['algo_params']['use_next_obs_in_context'],
-            ensemble_size=variant['algo_params']['ensemble_size'],
-            dynamics_weight_decay=[2.5e-5, 5e-5, 7.5e-5])
+            use_next_obs_in_context=variant["algo_params"]["use_next_obs_in_context"],
+            ensemble_size=variant["algo_params"]["ensemble_size"],
+            dynamics_weight_decay=[2.5e-5, 5e-5, 7.5e-5],
+        )
 
     # Setting up tasks
     if 'randomize_tasks' in variant.keys() and variant['randomize_tasks']:
@@ -210,7 +214,8 @@ def experiment(gpu_id, variant, seed=None):
     eval_tasks = np.array(list(set(range(len(tasks))).difference(train_tasks)))
     goal_radius = variant['env_params']['goal_radius'] if 'goal_radius' in variant['env_params'] else 1
     
-    task_dynamics.load(os.path.join(variant['algo_params']['data_dir'], 'dynamics'))
+    if variant['algo_params']['use_relabel']:
+        task_dynamics.load(os.path.join(variant['algo_params']['data_dir'], 'dynamics'))
     
     # Choose algorithm
     algo_type = variant['algo_type']
@@ -223,7 +228,7 @@ def experiment(gpu_id, variant, seed=None):
         goal_radius=goal_radius,
         seed=seed,
         algo_type=algo_type,
-        env_name = variant['env_name'],
+        env_name=variant['env_name'],
         **variant['algo_params'],
     )
     # focal nets=[agent, qf1, qf2, vf, c]
@@ -278,7 +283,7 @@ def experiment(gpu_id, variant, seed=None):
         base_log_dir=variant['util_params']['base_log_dir'],
         seed=seed,
         snapshot_mode="gap_and_last",
-        snapshot_gap=5
+        snapshot_gap=5,
     )
 
     # optionally save eval trajectories as pkl files
@@ -349,7 +354,7 @@ def main(config, mujoco_version, gpu, seed, exp_name=None, pretrain=None, algo_t
     seed = [int(s) for s in seed.split(",")]
     print(f"Parsed seeds: {seed}")
     if len(seed) > 1:
-        p = mp.Pool(2*len(gpu))
+        p = mp.Pool(2 * len(gpu))
         args = []
         for i, s in enumerate(seed):
             gpu_id = gpu[i % len(gpu)]
