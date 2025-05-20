@@ -81,7 +81,7 @@
             "hvar_punish_w": 25,
             "use_classify_loss": true,
             "classify_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/walker-rand-params/pre/classifier_right_mix_z0_hvar_pre/"
+            "pretrained_agent_path": "logs/walker-rand-params/pre/classifier_mix_z0_hvar_pre"
         },
         "IDAQ": {
             "use_focal_loss": true,

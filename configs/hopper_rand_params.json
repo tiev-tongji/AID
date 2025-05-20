@@ -53,7 +53,7 @@
             "hvar_punish_w": 0.1,
             "use_focal_loss": true,
             "focal_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/hopper-rand-params/pre/focal_right_mix_z0_hvar_pre/"
+            "pretrained_agent_path": "logs/hopper-rand-params/pre/focal_right_mix_z0_hvar_pre"
         },
         "CSRO": {
             "use_focal_loss": true,

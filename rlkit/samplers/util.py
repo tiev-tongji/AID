@@ -6,11 +6,6 @@ def offline_rollout(env, agent, buffer, max_path_length=np.inf, accum_context=Tr
     # perform online rollout as in rollout()
     # If accum_context=True, aggregate offline context
     batch_dict = buffer.task_buffers[env._goal_idx].random_batch(max_path_length)
-    # observations = batch_dict['observations']
-    # actions = batch_dict['actions']
-    # rewards = batch_dict['rewards']
-    # terminals = batch_dict['terminals']
-    # next_observations = batch_dict['next_observations']
     observations = []
     actions = []
     rewards = []
@@ -22,30 +17,8 @@ def offline_rollout(env, agent, buffer, max_path_length=np.inf, accum_context=Tr
 
     if callable(getattr(env, "sparsify_rewards", None)):
         env_infos = [{'sparse_reward': env.sparsify_rewards(r)} for r in rewards]
-    # batch_dict = dict(
-    #     observations=self._observations[indices],
-    #     actions=self._actions[indices],
-    #     rewards=self._rewards[indices],
-    #     terminals=self._terminals[indices],
-    #     next_observations=self._next_obs[indices],
-    #     sparse_rewards=self._sparse_rewards[indices],
-    # )
 
     if accum_context:
-        # update the agent's current context
-        # while idx < max_path_length:
-        #     o = batch_dict['observations'][idx]
-        #     a = batch_dict['actions'][idx]
-        #     r = batch_dict['rewards'][idx]
-        #     t = batch_dict['terminals'][idx]
-        #     next_o = batch_dict['next_observations'][idx]
-        #     if callable(getattr(env, "sparsify_rewards", None)):
-        #         env_info = {'sparse_reward': env.sparsify_rewards(r)}
-        #     else:
-        #         env_info = {}
-        #     print(o, a, r, o.shape, a.shape, r.shape)
-        #     agent.update_context([o, a, r, next_o, t, env_info])
-        #     idx += 1
         agent.update_context_dict(batch_dict=batch_dict, env=env)
 
     agent.infer_posterior(agent.context, task_indices=env._goal_idx)
@@ -129,16 +102,6 @@ def offline_sample(env, agent, buffer, max_path_length=np.inf, accum_context=Tru
        :param save_frames: if True, save video of rollout
        :return:
        """
-    # observations = []
-    # actions = []
-    # rewards = []
-    # terminals = []
-
-    # o = env.reset()
-    # goal_idx = env.goal_idx
-    # next_o = None
-    # path_length = 0
-
     batch_dict = buffer.task_buffers[env._goal_idx].random_batch(max_path_length)
     observations = batch_dict['observations']
     actions = batch_dict['actions']
@@ -150,29 +113,9 @@ def offline_sample(env, agent, buffer, max_path_length=np.inf, accum_context=Tru
 
     if callable(getattr(env, "sparsify_rewards", None)):
         env_infos = [{'sparse_reward': env.sparsify_rewards(r)} for r in rewards]
-    # batch_dict = dict(
-    #     observations=self._observations[indices],
-    #     actions=self._actions[indices],
-    #     rewards=self._rewards[indices],
-    #     terminals=self._terminals[indices],
-    #     next_observations=self._next_obs[indices],
-    #     sparse_rewards=self._sparse_rewards[indices],
-    # )
 
     if accum_context:
-        # while idx < max_path_length:
-        #     o = batch_dict['observations'][idx]
-        #     a = batch_dict['actions'][idx]
-        #     r = batch_dict['rewards'][idx]
-        #     t = batch_dict['terminals'][idx]
-        #     next_o = batch_dict['next_observations'][idx]
-        #     if callable(getattr(env, "sparsify_rewards", None)):
-        #         env_info = {'sparse_reward': env.sparsify_rewards(r)}
-        #     print(o, a, r, o.shape, a.shape, r.shape)
-        #     agent.update_context([o, a, r, next_o, t, env_info])
-        #     idx += 1
         agent.update_context_dict(batch_dict=batch_dict, env=env)
-        # agent.infer_posterior(agent.context, task_indices=np.array([env._goal_idx]))
 
     actions = np.array(actions)
     if len(actions.shape) == 1:
@@ -546,28 +489,6 @@ def ensemble_rollout(env, agent, max_path_length=np.inf, accum_context=True, is_
         )
     )
 
-    # num_ensemble = len(reward_models)
-    # reward_predictions = []
-    # prediction_errors = []
-    # dynamics_predictions = []
-    # pes = []
-    # for i in range(num_ensemble):
-    #     reward_prediction = reward_models[i].forward(0, 0, agent.z.detach().float().repeat(observation_batch.shape[0],1), observation_batch.float(), action_batch.float())
-    #     dynamic_prediction = dynamic_models[i].forward(0, 0, agent.z.detach().float().repeat(observation_batch.shape[0], 1),
-    #                                           observation_batch.float(), action_batch.float())
-    #     reward_predictions.append(reward_prediction)
-    #     dynamics_predictions.append(dynamic_prediction)
-    #     pe = ((reward_prediction-torch.from_numpy(np.array(rewards).reshape(-1, 1)).to(agent.z.device).float())**2).mean()+((dynamic_prediction-torch.from_numpy(n_next_observations).to(agent.z.device).float())**2).mean()
-    #     pes.append(pe)
-    #     prediction_errors.append(((reward_prediction-torch.from_numpy(np.array(rewards).reshape(-1, 1)).to(agent.z.device).float())**2).mean().item()+((dynamic_prediction-torch.from_numpy(n_next_observations).to(agent.z.device).float())**2).mean().item())
-    # reward_predictions = torch.stack(reward_predictions)
-    # dynamics_predictions = torch.stack(dynamics_predictions)
-    # pes = torch.stack(pes)
-
-
-    # uncentainty = pes.mean()
-    # if use_std:
-    #     uncentainty = torch.std(reward_predictions, dim=1).mean() + torch.std(dynamics_predictions, dim=1).mean()
     # update the agent's current context
     if accum_context:
         if is_onlineadapt_max:
@@ -603,8 +524,6 @@ def ensemble_rollout(env, agent, max_path_length=np.inf, accum_context=True, is_
         terminals=np.array(terminals).reshape(-1, 1),
         agent_infos=agent_infos,
         env_infos=env_infos,
-        # uncertanties=-1 * uncentainty.item(),
-        # prediction_errors=prediction_errors
     )
 
 def z_random_switch_rollout(env, agent, max_path_length=np.inf, accum_context=True, update_z_per_step=False, animated=False, save_frames=False):

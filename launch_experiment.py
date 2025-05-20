@@ -129,20 +129,6 @@ def experiment(gpu_id, variant, seed=None):
         output_size=1,
     )
 
-    reward_models = torch.nn.ModuleList()
-    dynamic_models = torch.nn.ModuleList()
-    for _ in range(variant['algo_params']['num_ensemble']):
-        reward_models.append(
-            FlattenMlp(hidden_sizes=[net_size, net_size, net_size],
-                       input_size=latent_dim + obs_dim + action_dim,
-                       output_size=1, )
-        )
-        dynamic_models.append(
-            FlattenMlp(hidden_sizes=[net_size, net_size, net_size],
-                       input_size=latent_dim + obs_dim + action_dim,
-                       output_size=obs_dim, )
-        )
-
     qf1 = FlattenMlp(
         hidden_sizes=[net_size, net_size, net_size],
         input_size=obs_dim + action_dim + latent_dim,
@@ -203,6 +189,21 @@ def experiment(gpu_id, variant, seed=None):
             use_next_obs_in_context=variant["algo_params"]["use_next_obs_in_context"],
             ensemble_size=variant["algo_params"]["ensemble_size"],
             dynamics_weight_decay=[2.5e-5, 5e-5, 7.5e-5],
+        )
+
+    # IDAQ
+    reward_models = torch.nn.ModuleList()
+    dynamic_models = torch.nn.ModuleList()
+    for _ in range(variant['algo_params']['num_ensemble']):
+        reward_models.append(
+            FlattenMlp(hidden_sizes=[net_size, net_size, net_size],
+                       input_size=latent_dim + obs_dim + action_dim,
+                       output_size=1, )
+        )
+        dynamic_models.append(
+            FlattenMlp(hidden_sizes=[net_size, net_size, net_size],
+                       input_size=latent_dim + obs_dim + action_dim,
+                       output_size=obs_dim, )
         )
 
     # Setting up tasks

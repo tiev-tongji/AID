@@ -69,7 +69,7 @@
             "use_recon_loss": true,
             "focal_loss_weight": 0.5,
             "recon_loss_weight": 1.0,
-            "pretrained_agent_path": "logs/cheetah-vel/UNICORN/unicorn_z0_hvar_0.5_pre"
+            "pretrained_agent_path": "logs/cheetah-vel/pre/unicorn_z0_hvar_0.5_pre"
         },
         "RECON": {
             "hvar_punish_w": 100,

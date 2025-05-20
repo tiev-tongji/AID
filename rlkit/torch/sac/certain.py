@@ -23,20 +23,21 @@ atexit.register(profile.print_stats)
 
 class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
     def __init__(
-            self,
-            env,
-            train_tasks,
-            eval_tasks,
-            latent_dim,
-            nets,
-            goal_radius=1,
-            optimizer_class=optim.Adam,
-            plotter=None,
-            render_eval_paths=False,
-            seed=0,
-            algo_type = 'CSRO',
-            **kwargs
+        self,
+        env,
+        train_tasks,
+        eval_tasks,
+        latent_dim,
+        nets,
+        goal_radius=1,
+        optimizer_class=optim.Adam,
+        plotter=None,
+        render_eval_paths=False,
+        seed=0,
+        algo_type='CSRO',
+        **kwargs
     ):
+        # Initialize parent class
         super().__init__(
             env=env,
             agent=nets[0],
@@ -46,153 +47,151 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
             **kwargs
         )
 
-        ## 基本配置
-        self.seed                           = seed
-        self.env_name                       = kwargs['env_name']
-        self.algo_type                      = algo_type
-        self.latent_dim                     = latent_dim
-        self.separate_train                 = kwargs['separate_train']
-        self.pretrain                       = kwargs['pretrain']
-        self.train_z0_policy                = kwargs['train_z0_policy']
-        self.use_hvar                       = kwargs['use_hvar'] # 是否使用异方差
-        self.policy_update_strategy         = kwargs['policy_update_strategy'] # 策略更新 BRAC or TD3BC
-        self.hete_offset                    = kwargs['hete_offset'] # 异方差损失的阈值
-        self.first_path_len                 = kwargs['first_path_len'] # 第一次采样的长度
+        # Basic configurations
+        self.seed = seed
+        self.env_name = kwargs['env_name']
+        self.algo_type = algo_type
+        self.latent_dim = latent_dim
+        self.separate_train = kwargs['separate_train']
+        self.pretrain = kwargs['pretrain']
+        self.train_z0_policy = kwargs['train_z0_policy']
+        self.use_hvar = kwargs['use_hvar']
+        self.policy_update_strategy = kwargs['policy_update_strategy']
+        self.hete_offset = kwargs['hete_offset']
+        self.first_path_len = kwargs['first_path_len']
+        self.recurrent = kwargs['recurrent']
+        self.use_relabel = kwargs['use_relabel']
+        self.use_next_obs_in_context = kwargs['use_next_obs_in_context']
 
-        self.recurrent                      = kwargs['recurrent'] # 是否使用循环编码器
-        self.use_relabel                    = kwargs['use_relabel'] # 是否使用重标记
-        self.use_next_obs_in_context        = kwargs['use_next_obs_in_context'] # 是否使用下一个观测
+        # Training parameters
+        self.soft_target_tau = kwargs['soft_target_tau']
+        self.allow_backward_z = kwargs['allow_backward_z']
+        self.num_ensemble = kwargs['num_ensemble']
 
-        ## 训练参数
-        self.soft_target_tau                = kwargs['soft_target_tau'] # 软目标更新
-        self.allow_backward_z               = kwargs['allow_backward_z'] # 是否允许梯度通过z流动
-        self.num_ensemble                   = kwargs['num_ensemble'] # IDAQ
+        # BRAC settings
+        self.use_brac = kwargs['use_brac']
+        self.train_alpha = kwargs['train_alpha']
+        self.use_value_penalty = kwargs['use_value_penalty']
+        self.alpha_max = kwargs['alpha_max']
+        self.alpha_init = kwargs['alpha_init']
+        self._target_divergence = kwargs['target_divergence']
+        self._c_iter = kwargs['c_iter']
+        self._divergence_name = kwargs['divergence_name']
+        self.policy_mean_reg_weight = kwargs['policy_mean_reg_weight']
+        self.policy_std_reg_weight = kwargs['policy_std_reg_weight']
+        self.policy_pre_activation_weight = kwargs['policy_pre_activation_weight']
 
-        # BRAC参数
-        self.use_brac                       = kwargs['use_brac'] # 是否使用BRAC
-        self.train_alpha                    = kwargs['train_alpha'] # 是否训练alpha
-        self.use_value_penalty              = kwargs['use_value_penalty'] # 是否使用值惩罚
-        self.alpha_max                      = kwargs['alpha_max'] # alpha的最大值
-        self.alpha_init                     = kwargs['alpha_init'] # alpha的初始值
-        self._target_divergence             = kwargs['target_divergence'] # 训练alpha自适应的目标散度
-        self._c_iter                        = kwargs['c_iter'] # 每次迭代的双重评论者步数
-        self._divergence_name               = kwargs['divergence_name'] # BRAC算法的散度类型
-        # self.kl_lambda                      = kwargs['kl_lambda']
-        self.policy_mean_reg_weight         = kwargs['policy_mean_reg_weight']
-        self.policy_std_reg_weight          = kwargs['policy_std_reg_weight']
-        self.policy_pre_activation_weight   = kwargs['policy_pre_activation_weight']
+        # TD3BC settings
+        self.step_to_update_policy = kwargs['step_to_update_policy']
+        self.delay_frequency = kwargs['delay_frequency']
+        self.bc_weight = kwargs['bc_weight']
+        self.gamma = kwargs['gamma']
 
-        # TD3BC参数
-        self.step_to_update_policy          = kwargs['step_to_update_policy'] # 更新策略的步数
-        self.delay_frequency                = kwargs['delay_frequency'] # 延迟频率
-        self.bc_weight                      = kwargs['bc_weight'] # 行为克隆权重
-        self.gamma                          = kwargs['gamma'] # 折扣因子
+        # Reward settings
+        self.sparse_rewards = kwargs['sparse_rewards']
+        self.max_entropy = kwargs['max_entropy']
 
-        # 奖励设置
-        self.sparse_rewards                 = kwargs['sparse_rewards'] # 是否稀疏奖励
-        self.max_entropy                    = kwargs['max_entropy'] # 是否在值函数中包含最大熵项
+        # Learning rates
+        self.alpha_lr = kwargs['alpha_lr']
+        self.policy_lr = kwargs['policy_lr']
+        self.qf_lr = kwargs['qf_lr']
+        self.vf_lr = kwargs['vf_lr']
+        self.c_lr = kwargs['c_lr']
+        self.context_lr = kwargs['context_lr']
 
-        # 更新步长
-        self.alpha_lr                       = kwargs['alpha_lr']
-        self.policy_lr                      = kwargs['policy_lr']
-        self.qf_lr                          = kwargs['qf_lr']
-        self.vf_lr                          = kwargs['vf_lr']
-        self.c_lr                           = kwargs['c_lr']
-        self.context_lr                     = kwargs['context_lr']
-
-        # loss
+        # Loss configuration
         params = kwargs[algo_type]
-        self.hvar_punish_w                  = params['hvar_punish_w']
-        self.use_recon_loss                 = params['use_recon_loss']
-        self.recon_loss_weight              = params['recon_loss_weight']
+        self.hvar_punish_w = params['hvar_punish_w']
+        self.use_recon_loss = params['use_recon_loss']
+        self.recon_loss_weight = params['recon_loss_weight']
+        self.use_focal_loss = params['use_focal_loss']
+        self.focal_loss_weight = params['focal_loss_weight']
+        self.use_club_loss = params['use_club_loss']
+        self.club_loss_weight = params['club_loss_weight']
+        self.club_model_loss_weight = params['club_model_loss_weight']
+        self.use_croo_loss = params['use_croo_loss']
+        self.croo_loss_weight = params['croo_loss_weight']
+        self.use_croo_max = params['use_croo_max']
+        self.use_classify_loss = params['use_classify_loss']
+        self.classify_loss_weight = params['classify_loss_weight']
+        self.use_infoNCE_loss = params['use_infoNCE_loss']
+        self.infoNCE_loss_weight = params['infoNCE_loss_weight']
+        self.infoNCE_temp = params['infoNCE_temp']
 
-        self.use_focal_loss                 = params['use_focal_loss']
-        self.focal_loss_weight              = params['focal_loss_weight']
-        
-        self.use_club_loss                  = params['use_club_loss']
-        self.club_loss_weight               = params['club_loss_weight']
-        self.club_model_loss_weight         = params['club_model_loss_weight']
+        # Initialize placeholders and loss functions
+        self.loss = {}
+        self.plotter = plotter
+        self.render_eval_paths = render_eval_paths
+        self.qf_criterion = nn.MSELoss()
+        self.vf_criterion = nn.MSELoss()
+        self.vib_criterion = nn.MSELoss()
+        self.l2_reg_criterion = nn.MSELoss()
+        self.club_criterion = nn.MSELoss()
+        self.pred_loss = nn.MSELoss()
+        self.hvar_loss = nn.MSELoss()
+        self.cross_entropy_loss = nn.CrossEntropyLoss()
 
-        self.use_croo_loss                  = params['use_croo_loss']
-        self.croo_loss_weight               = params['croo_loss_weight']
-        self.use_croo_max                   = params['use_croo_max']
-
-        self.use_classify_loss              = params['use_classify_loss']
-        self.classify_loss_weight           = params['classify_loss_weight']
-
-        self.use_infoNCE_loss               = params['use_infoNCE_loss']
-        self.infoNCE_loss_weight            = params['infoNCE_loss_weight']
-        self.infoNCE_temp                   = params['infoNCE_temp']
-
-        self.loss                           = {}
-        self.plotter                        = plotter
-        self.render_eval_paths              = render_eval_paths
-        self.qf_criterion                   = nn.MSELoss()
-        self.vf_criterion                   = nn.MSELoss()
-        self.vib_criterion                  = nn.MSELoss()
-        self.l2_reg_criterion               = nn.MSELoss()
-        self.club_criterion                 = nn.MSELoss()
-        self.pred_loss                      = nn.MSELoss()
-        self.hvar_loss                      = nn.MSELoss()
-        self.cross_entropy_loss             = nn.CrossEntropyLoss()
-
+        # Unpack networks
         self.qf1, self.qf2, _, _, self.club_model, self.context_decoder, self.classifier, self.reward_models, self.dynamic_models, self.task_dynamics = nets[1:]
         if self.policy_update_strategy == 'BRAC':
-            self.vf                             = nets[3]
-            self.target_vf                      = self.vf.copy()
-            self.c                              = nets[4]
+            self.vf = nets[3]
+            self.target_vf = self.vf.copy()
+            self.c = nets[4]
         elif self.policy_update_strategy == 'TD3BC':
-            self.target_qf1                     = self.qf1.copy()
-            self.target_qf2                     = self.qf2.copy()
+            self.target_qf1 = self.qf1.copy()
+            self.target_qf2 = self.qf2.copy()
         else:
             raise NotImplementedError
 
-        # 分开训练的训练部分，不更新
+        # Load pretrained agent if needed
         if self.separate_train and not self.pretrain:
-            print(f'*************************Using pretrained agent************************')
-            agent_path = Path(kwargs[algo_type]['pretrained_agent_path'])
-            if not agent_path.exists():
-                raise ValueError(f"separate_train is True but pretrained_agent_path does not exist: {agent_path}")
-            if agent_path.is_dir():
-                agent_path = agent_path / 'agent.pth'
-            if not agent_path.exists():
-                agent_path = agent_path.parent / f'seed{seed}/agent.pth'
-            if not agent_path.exists():
-                raise ValueError(f"separate_train is True but pretrained_agent_path does not exist: {agent_path}")
-            agent_ckpt = torch.load(str(agent_path))
-            self.agent.context_encoder.load_state_dict(agent_ckpt['context_encoder'])
-            self.agent.uncertainty_mlp.load_state_dict(agent_ckpt['uncertainty_mlp'])
-            if algo_type == 'CSRO':
-                self.club_model.load_state_dict(agent_ckpt['club_model'])
-            if algo_type == 'CLASSIFIER':
-                self.classifier.load_state_dict(agent_ckpt['classifier'])
-            if algo_type == 'CROO':
-                self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
-                self.club_model.load_state_dict(agent_ckpt['club_model'])
-            if algo_type == 'UNICORN':
-                self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
-            if algo_type == 'RECON':
-                self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
+            self._load_pretrained_agent(kwargs[algo_type]['pretrained_agent_path'])
 
-        self.qf1_optimizer                  = optimizer_class(self.qf1.parameters(), lr=self.qf_lr)
-        self.qf2_optimizer                  = optimizer_class(self.qf2.parameters(), lr=self.qf_lr)
+        # Initialize optimizers
+        self._initialize_optimizers(optimizer_class)
+
+        # Internal counters
+        self._num_steps = 0
+        self._visit_num_steps_train = 10
+        self._alpha_var = torch.tensor(1.)
+
+    def _load_pretrained_agent(self, agent_path):
+        """Load pretrained agent from checkpoint."""
+        print(f'*************************Using pretrained agent************************')
+        agent_path = Path(agent_path)
+        if agent_path.is_dir():
+            agent_path = agent_path / 'agent.pth'
+        if not agent_path.exists():
+            agent_path = agent_path.parent / f'seed{self.seed}/agent.pth'
+        if not agent_path.exists():
+            raise ValueError(f"Pretrained agent path does not exist: {agent_path}")
+        agent_ckpt = torch.load(str(agent_path))
+        self.agent.context_encoder.load_state_dict(agent_ckpt['context_encoder'])
+        self.agent.uncertainty_mlp.load_state_dict(agent_ckpt['uncertainty_mlp'])
+        if self.algo_type == 'CSRO':
+            self.club_model.load_state_dict(agent_ckpt['club_model'])
+        if self.algo_type == 'CLASSIFIER':
+            self.classifier.load_state_dict(agent_ckpt['classifier'])
+        if self.algo_type in ['CROO', 'UNICORN', 'RECON']:
+            self.context_decoder.load_state_dict(agent_ckpt['context_decoder'])
+            if 'club_model' in agent_ckpt:
+                self.club_model.load_state_dict(agent_ckpt['club_model'])
+
+    def _initialize_optimizers(self, optimizer_class):
+        """Initialize all optimizers used in training."""
+        self.qf1_optimizer = optimizer_class(self.qf1.parameters(), lr=self.qf_lr)
+        self.qf2_optimizer = optimizer_class(self.qf2.parameters(), lr=self.qf_lr)
         if self.policy_update_strategy == 'BRAC':
-            self.vf_optimizer                   = optimizer_class(self.vf.parameters(),  lr=self.vf_lr)
-            self.c_optimizer                    = optimizer_class(self.c.parameters(),   lr=self.c_lr)
-        self.club_model_optimizer           = optimizer_class(self.club_model.parameters(), lr=self.context_lr)
-        # self.behavior_encoder_optimizer     = optimizer_class(self.behavior_encoder.parameters(), lr=self.context_lr)
-        self.context_decoder_optimizer      = optimizer_class(self.context_decoder.parameters(), lr=self.context_lr)
-        self.classifier_optimizer           = optimizer_class(self.classifier.parameters(), lr=self.context_lr)
+            self.vf_optimizer = optimizer_class(self.vf.parameters(),  lr=self.vf_lr)
+            self.c_optimizer = optimizer_class(self.c.parameters(),   lr=self.c_lr)
+        self.club_model_optimizer = optimizer_class(self.club_model.parameters(), lr=self.context_lr)
+        self.context_decoder_optimizer = optimizer_class(self.context_decoder.parameters(), lr=self.context_lr)
+        self.classifier_optimizer = optimizer_class(self.classifier.parameters(), lr=self.context_lr)
         self.reward_models_optimizer = optimizer_class(self.reward_models.parameters(), lr=self.qf_lr)
         self.dynamic_models_optimizer = optimizer_class(self.dynamic_models.parameters(), lr=self.qf_lr)
-        
-        self.policy_optimizer               = optimizer_class(self.agent.policy.parameters(), lr=self.policy_lr)
-        self.uncertainty_mlp_optimizer      = optimizer_class(self.agent.uncertainty_mlp.parameters(), lr=self.context_lr)
-        self.context_encoder_optimizer      = optimizer_class(self.agent.context_encoder.parameters(), lr=self.context_lr)
-
-        self._num_steps                     = 0
-        self._visit_num_steps_train         = 10
-        self._alpha_var                     = torch.tensor(1.)
+        self.policy_optimizer = optimizer_class(self.agent.policy.parameters(), lr=self.policy_lr)
+        self.uncertainty_mlp_optimizer = optimizer_class(self.agent.uncertainty_mlp.parameters(), lr=self.context_lr)
+        self.context_encoder_optimizer = optimizer_class(self.agent.context_encoder.parameters(), lr=self.context_lr)
 
     ###### Torch stuff #####
     @property
@@ -708,18 +707,6 @@ class CERTAINSoftActorCritic(OfflineMetaRLAlgorithm):
 
         # 计算异方差损失
         if self.use_hvar:
-            # if self.algo_type == 'UNICORN' or self.algo_type == 'RECON':
-            # if 0:
-            #     total_loss.backward()
-            #     self.context_encoder_optimizer.step()
-            #     if self.algo_type == 'CLASSIFIER': # CLASSIFIER
-            #         self.classifier_optimizer.step()
-            #     if self.algo_type == 'CROO' or self.algo_type == 'UNICORN' or self.algo_type == 'RECON': # CROO UNICORN RECON
-            #         self.context_decoder_optimizer.step()
-            #     heteroscedastic_loss, heteroscedastic_var = self.HeteroscedasticLoss(context, total_loss.detach())
-            #     heteroscedastic_loss.backward()
-            #     self.uncertainty_mlp_optimizer.step()
-            # else:
             heteroscedastic_loss, heteroscedastic_var = self.HeteroscedasticLoss(context, total_loss)
             heteroscedastic_loss.backward()
             self.uncertainty_mlp_optimizer.step()
