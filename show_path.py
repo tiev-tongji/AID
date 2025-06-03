@@ -487,7 +487,7 @@ def deep_update_dict(fr, to):
 @click.option('--use_hvar', type=click.Choice(['true', 'false'], case_sensitive=False), default=None)
 @click.option('--z_strategy', type=click.Choice(['mean', 'min', 'weighted', 'quantile'], case_sensitive=False), default=None)
 @click.option('--r_thres', default=None)
-# python show_path_2.py configs/point-robot.json --gpu 0 --seed 0 --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
+# python show_path.py configs/point-robot.json --gpu 0 --seed 0 --algo_type FOCAL --train_z0_policy true --use_hvar true --z_strategy weighted
 def main(config, mujoco_version, gpu, seed, algo_type=None, train_z0_policy = None, use_hvar = None, z_strategy = None, r_thres=None):
     variant = default_config
     if config:
